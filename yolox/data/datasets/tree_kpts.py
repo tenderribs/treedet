@@ -72,52 +72,52 @@ class TREEKPTSDataset(Dataset):
         annotations = [self.load_anno_from_ids(_ids) for _ids in self.ids if self.load_anno_from_ids(_ids) is not None]
         ids = [ _ids for _ids in self.ids if self.load_anno_from_ids(_ids) is not None]
         return annotations, ids
-    # def _cache_images(self):
-        # logger.warning(
-        #     "\n********************************************************************************\n"
-        #     "You are using cached images in RAM to accelerate training.\n"
-        #     "This requires large system RAM.\n"
-        #     "Make sure you have 200G+ RAM and 136G available disk space for training COCO.\n"
-        #     "********************************************************************************\n"
-        # )
-        # max_h = self.img_size[0]
-        # max_w = self.img_size[1]
-        # cache_file = self.data_dir + "/img_resized_cache_" + self.name + ".array"
-        # if not os.path.exists(cache_file):
-        #     logger.info(
-        #         "Caching images for the first time. This might take about 20 minutes for COCO"
-        #     )
-        #     self.imgs = np.memmap(
-        #         cache_file,
-        #         shape=(len(self.annotations), max_h, max_w, 3),
-        #         dtype=np.uint8,
-        #         mode="w+",
-        #     )
-        #     from tqdm import tqdm
-        #     from multiprocessing.pool import ThreadPool
+    def _cache_images(self):
+        logger.warning(
+            "\n********************************************************************************\n"
+            "You are using cached images in RAM to accelerate training.\n"
+            "This requires large system RAM.\n"
+            "Make sure you have 200G+ RAM and 136G available disk space for training COCO.\n"
+            "********************************************************************************\n"
+        )
+        max_h = self.img_size[0]
+        max_w = self.img_size[1]
+        cache_file = self.data_dir + "/img_resized_cache_" + self.name + ".array"
+        if not os.path.exists(cache_file):
+            logger.info(
+                "Caching images for the first time. This might take about 20 minutes for COCO"
+            )
+            self.imgs = np.memmap(
+                cache_file,
+                shape=(len(self.annotations), max_h, max_w, 3),
+                dtype=np.uint8,
+                mode="w+",
+            )
+            from tqdm import tqdm
+            from multiprocessing.pool import ThreadPool
 
-        #     NUM_THREADs = min(8, os.cpu_count())
-        #     loaded_images = ThreadPool(NUM_THREADs).imap(
-        #         lambda x: self.load_resized_img(x),
-        #         range(len(self.annotations)),
-        #     )
-        #     pbar = tqdm(enumerate(loaded_images), total=len(self.annotations))
-        #     for k, out in pbar:
-        #         self.imgs[k][: out.shape[0], : out.shape[1], :] = out.copy()
-        #     self.imgs.flush()
-        #     pbar.close()
-        # else:
-        #     logger.warning(
-        #         "You are using cached imgs! Make sure your dataset is not changed!!"
-        #     )
+            NUM_THREADs = min(8, os.cpu_count())
+            loaded_images = ThreadPool(NUM_THREADs).imap(
+                lambda x: self.load_resized_img(x),
+                range(len(self.annotations)),
+            )
+            pbar = tqdm(enumerate(loaded_images), total=len(self.annotations))
+            for k, out in pbar:
+                self.imgs[k][: out.shape[0], : out.shape[1], :] = out.copy()
+            self.imgs.flush()
+            pbar.close()
+        else:
+            logger.warning(
+                "You are using cached imgs! Make sure your dataset is not changed!!"
+            )
 
-        # logger.info("Loading cached imgs...")
-        # self.imgs = np.memmap(
-        #     cache_file,
-        #     shape=(len(self.annotations), max_h, max_w, 3),
-        #     dtype=np.uint8,
-        #     mode="r+",
-        # )
+        logger.info("Loading cached imgs...")
+        self.imgs = np.memmap(
+            cache_file,
+            shape=(len(self.annotations), max_h, max_w, 3),
+            dtype=np.uint8,
+            mode="r+",
+        )
 
     def load_anno_from_ids(self, id_):
         im_ann = self.coco.loadImgs(id_)[0]

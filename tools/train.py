@@ -16,23 +16,25 @@ from yolox.core import Trainer, launch
 from yolox.exp import get_exp
 from yolox.utils import configure_nccl, configure_omp, get_num_devices
 
-_SUPPORTED_DATASETS = ["coco", "lm", "lmo", "ycbv", "tless", "coco_kpts"]
-_NUM_CLASSES = {"coco":80, "lm":15, "lmo": 8, "ycbv": 21, "tless": 30, "coco_kpts":1}
+_SUPPORTED_DATASETS = ["coco", "lm", "lmo", "ycbv", "tless", "coco_kpts", "tree_kpts"]
+_NUM_CLASSES = {"coco":80, "lm":15, "lmo": 8, "ycbv": 21, "tless": 30, "coco_kpts":1, "tree_kpts":1}
 _VAL_ANN = {
-    "coco":"instances_val2017.json", 
+    "coco":"instances_val2017.json",
     "lm":"instances_test.json",
     "lmo":"instances_test_bop.json",
     "ycbv": "instances_test_bop.json",
     "tless": "instances_test_bop.json",
     "coco_kpts": "person_keypoints_val2017.json",
+    "tree_kpts": "trees_val.json",
 }
 _TRAIN_ANN = {
-    "coco":"instances_train2017.json", 
+    "coco":"instances_train2017.json",
     "lm":"instances_train.json",
     "lmo":"instances_train_pbr.json",   #This can be the default setting for the LMO datase
     "ycbv": "instances_train.json",
     "tless": "instances_train.json", #"instances_train.json"
     "coco_kpts": "person_keypoints_train2017.json",
+    "tree_kpts": "trees_train.json",
 }
 _SUPPORTED_TASKS = {
     "coco":["2dod"],
@@ -40,7 +42,8 @@ _SUPPORTED_TASKS = {
     "lmo": ["2dod", "object_pose"],
     "ycbv": ["2dod", "object_pose"],
     "tless": ["2dod", "object_pose"],
-    "coco_kpts": ["2dod", "human_pose"]
+    "coco_kpts": ["2dod", "human_pose"],
+    "tree_kpts": ["2dod", "human_pose"]
 }
 
 def make_parser():
@@ -82,10 +85,10 @@ def make_parser():
     parser.add_argument("--task", default="2dod", type=str, help="type of task for model eval")
     parser.add_argument("-c", "--ckpt", default=None, type=str, help="checkpoint file")
     parser.add_argument(
-        "-odw", 
-        "--od-weights", 
-        default=None, 
-        type=str, 
+        "-odw",
+        "--od-weights",
+        default=None,
+        type=str,
         help="weights for trained 2DOD network"
     )
     parser.add_argument(
@@ -187,7 +190,9 @@ def main(exp, args):
             elif args.dataset=="coco_kpts":
                 if args.task == "human_pose":
                     exp.human_pose=True
-
+            elif args.dataset=="tree_kpts":
+                if args.task == "human_pose":
+                    exp.human_pose=True
         if args.visualize:
             exp.visualize = args.visualize
 
