@@ -3,11 +3,11 @@ import os
 import json
 
 # supposed names of the keypoints
-keypoint_names = ["kpL", "kpR", "kpC", "AX1", "AX2"]
+keypoint_names = ["kpC", "kpL", "kpR", "AX1", "AX2"]
 
 with open('./datasets/SynthTree43k/annotations/trees_val.json') as json_file:
     data = json.load(json_file)
-    image = data["images"][0]
+    image = data["images"][3]
 
     id = image['id']
 
@@ -24,10 +24,10 @@ with open('./datasets/SynthTree43k/annotations/trees_val.json') as json_file:
             y = int(kp[1 + idx*3])
 
             point = (x, y)
-            label_pos = (x - 40, y + (5-idx) * 5)
+            label_pos = (x - 40, y + 5)
 
             label = keypoint_names[idx]
-            cv2.circle(cvimage, point, radius=2, color=(0, 255, 0), thickness=-1)
+            cv2.circle(cvimage, point, radius=3, color=(0, 255, 0), thickness=-1)
             cv2.putText(cvimage, label, label_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
     fname = f"./YOLOX_outputs/{image['file_name']}"
