@@ -6,6 +6,7 @@ import datetime
 import os
 import time
 from loguru import logger
+import wandb
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -134,8 +135,8 @@ class Trainer:
         lr = self.lr_scheduler.update_lr(self.progress_in_iter + 1)
         for param_group in self.optimizer.param_groups:
             param_group["lr"] = lr
-        
-        if self.state_dict_object_detect is not None:    
+
+        if self.state_dict_object_detect is not None:
             state_dict_object_pose = self.model.state_dict()
 
             for key in self.state_dict_object_detect.keys():
@@ -201,7 +202,7 @@ class Trainer:
         self.model = model
         self.model.train()
 
-        if self.state_dict_object_detect is not None:    
+        if self.state_dict_object_detect is not None:
             state_dict_object_pose = self.model.state_dict()
 
             for key in self.state_dict_object_detect.keys():
@@ -221,7 +222,25 @@ class Trainer:
         logger.info("Training start...")
         logger.info("\n{}".format(model))
 
+
+        wandb.init(
+            # set the wandb project where this run will be logged
+            project="tree-det",
+
+            # track hyperparameters and run metadata
+            config={
+                "exp_name": self.exp.exp_name,
+                "num_classes": self.exp.num_classes,
+                "depth": self.exp.depth,
+                "width": self.exp.width,
+                "data_set": self.exp.data_set,
+                "input_size": self.exp.input_size,
+            }
+        )
+
     def after_train(self):
+        wandb.finish()
+
         logger.info(
             "Training of experiment is done and the best AP is {:.2f}".format(self.best_ap * 100)
         )
@@ -256,7 +275,7 @@ class Trainer:
         `after_iter` contains two parts of logic:
             * log information
             * reset setting of resize
-        """      
+        """
         # log needed information
         if (self.iter + 1) % self.exp.print_interval == 0:
             # TODO check ETA logic
@@ -287,6 +306,14 @@ class Trainer:
                 )
                 + (", size: {:d}, {}".format(self.input_size[0], eta_str))
             )
+
+            # log metrics to wandb
+            loss_dict = {k: v.latest for k, v in loss_meter.items() if 'loss' in k}
+            wandb.log({
+                "lr": self.meter["lr"].latest,
+                **loss_dict
+            })
+
             self.meter.clear_meters()
 
         # random resizing
@@ -345,7 +372,7 @@ class Trainer:
             evalmodel, self.evaluator, self.is_distributed
         )
         self.model.train()
-        if self.state_dict_object_detect is not None:                
+        if self.state_dict_object_detect is not None:
             state_dict_object_pose = self.model.state_dict()
 
             for key in self.state_dict_object_detect.keys():

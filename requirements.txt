@@ -27,3 +27,4 @@ scikit-learn
 PyYAML
 matplotlib
 scikit-learn
+wandb

@@ -1,6 +1,8 @@
 ### Linux ###
 *~
 
+wandb
+
 # user experiments directory
 YOLOX_outputs/
 datasets/
