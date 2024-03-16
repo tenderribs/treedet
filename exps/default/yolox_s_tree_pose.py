@@ -12,15 +12,18 @@ import torch.nn as nn
 class Exp(MyExp):
     def __init__(self):
         super(Exp, self).__init__()
+        # ---------------- model config ---------------- #
         self.depth = 0.33
         self.width = 0.50
-
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
-
-        # ---------------- model config ---------------- #
         self.num_classes = 1 # just trees
+        self.num_kpts = 5
+        self.act = "relu"
+        self.default_sigmas = False # refers the the sigmas used in OKS formula
+
         # ---------------- dataloader config ---------------- #
-        self.input_size = (720, 1280)  # (height, width)
+        self.input_size = (384, 672)  # (height, width)
+        # self.input_size = (480, 640)  # (height, width)
         # --------------- transform config ----------------- #
         # self.mosaic_prob = 0.0
         # self.mixup_prob = 0.0
@@ -40,11 +43,12 @@ class Exp(MyExp):
         # -----------------  testing config ------------------ #
         self.human_pose = True
         self.visualize = False #True
-        self.default_sigmas = True
+        self.od_weights = None
+
         self.data_set = "tree_kpts"
         self.val_ann = "trees_val.json" # resides in /annotations folder
         self.test_ann = "trees_test.json"
-
+        self.test_size = self.input_size
     def get_model(self):
         from yolox.models import YOLOX, YOLOPAFPN, YOLOXHeadKPTS
 
@@ -56,8 +60,8 @@ class Exp(MyExp):
 
         if getattr(self, "model", None) is None:
             in_channels = [256, 512, 1024]
-            backbone = YOLOPAFPN(self.depth, self.width, in_channels=in_channels)
-            head = YOLOXHeadKPTS(self.num_classes, self.width, in_channels=in_channels, default_sigmas=self.default_sigmas)
+            backbone = YOLOPAFPN(self.depth, self.width, in_channels=in_channels, act=self.act, conv_focus=True, split_max_pool_kernel=True)
+            head = YOLOXHeadKPTS(self.num_classes, self.width, in_channels=in_channels, act=self.act, default_sigmas=self.default_sigmas, num_kpts=self.num_kpts)
             self.model = YOLOX(backbone, head)
 
         self.model.apply(init_yolo)
@@ -88,11 +92,12 @@ class Exp(MyExp):
                 dataset = TREEKPTSDataset(
                     data_dir=self.data_dir,
                     json_file=self.train_ann,
-                    img_size=self.input_size,
+                    num_kpts=self.num_kpts,
                     preproc=TrainTransform(
                         max_labels=50,
                         flip_prob=self.flip_prob,
-                        hsv_prob=self.hsv_prob),
+                        hsv_prob=self.hsv_prob,
+                        num_kpts=self.num_kpts),
                     cache=cache_img,
                 )
 
@@ -108,7 +113,9 @@ class Exp(MyExp):
                 object_pose=self.object_pose,
                 human_pose=self.human_pose,
                 flip_index=dataset.flip_index,
+                num_kpts=self.num_kpts,
             ),
+            num_kpts=self.num_kpts,
             degrees=self.degrees,
             translate=self.translate,
             mosaic_scale=self.mosaic_scale,
@@ -151,6 +158,7 @@ class Exp(MyExp):
             valdataset = TREEKPTSDataset(
                 data_dir=self.data_dir,
                 json_file=self.val_ann if not testdev else self.test_ann,
+                num_kpts=self.num_kpts,
                 name="trees_val" if not testdev else "trees_test",
                 img_size=self.test_size,
                 preproc=ValTransform(legacy=legacy),
@@ -191,6 +199,8 @@ class Exp(MyExp):
                 human_pose=self.human_pose,
                 visualize=self.visualize,
                 output_dir=output_dir,
+                num_kpts=self.num_kpts,
+                default_sigmas=self.default_sigmas,
                 device_type=self.device_type
             )
         return evaluator

@@ -44,9 +44,9 @@ class TREEKPTSDataset(Dataset):
             data_dir = os.path.join(get_yolox_datadir())
         self.data_dir = data_dir
         self.json_file = json_file
-        self.num_kpts = num_kpts
+        self.num_kpts = 5
 
-        self.coco = COCO(os.path.join(self.data_dir, "annotations", self.json_file))
+        self.coco = COCO(os.path.join(self.data_dir, "SynthTree43k", "annotations", self.json_file))
         self.ids = self.coco.getImgIds()
         self.class_ids = sorted(self.coco.getCatIds())
         cats = self.coco.loadCats(self.coco.getCatIds())
@@ -57,10 +57,13 @@ class TREEKPTSDataset(Dataset):
         self.preproc = preproc
         self.human_pose = human_pose
         self.annotations, self.ids = self._load_coco_annotations()
-        self.flip_index = [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15] if default_flip_index else [i for i in range(num_kpts)]
+
+        # when you horizontally flip the image, the keypoint labels need to be modified
+        # in our format we have keypoint_names=["kpC", "kpL", "kpR", "AX1", "AX2"])
+        # kpL and kpR delimit the left and right sides of the tree, so we need to flip idx
+        self.flip_index = [0,2,1,3,4]
         if cache:
-            pass
-            # self._cache_images()
+            self._cache_images()
 
     def __len__(self):
         return len(self.annotations)
@@ -133,10 +136,10 @@ class TREEKPTSDataset(Dataset):
             y2 = np.min((height, y1 + np.max((0, obj["bbox"][3]))))
             if obj["area"] > 0 and x2 >= x1 and y2 >= y1 and obj['num_keypoints']>0:
                 obj["clean_bbox"] = [x1, y1, x2, y2]
-                # assert np.all(0 <= np.array(obj['keypoints'][0::3]))
-                # assert np.all(np.array(obj['keypoints'][0::3]) <= width)
-                # assert np.all(0 <= np.array(obj['keypoints'][1::3]))
-                # assert np.all(np.array(obj['keypoints'][1::3]) <= height)
+                # assert np.all(0 <= np.array(obj['keypoints'][0::3])), print(np.array(obj['keypoints'][0::3]))
+                # assert np.all(np.array(obj['keypoints'][0::3]) <= width), print(np.array(obj['keypoints'][0::3]))
+                # assert np.all(0 <= np.array(obj['keypoints'][1::3])), print(np.array(obj['keypoints'][1::3]))
+                # assert np.all(np.array(obj['keypoints'][1::3]) <= height), print(np.array(obj['keypoints'][1::3]))
                 obj["clean_kpts"] =  obj['keypoints']
                 objs.append(obj)
         num_objs = len(objs)
