@@ -39,9 +39,9 @@ pip3 install --no-input --upgrade pip setuptools
 
 ######################################################################
 echo "installing pytorch - use the applopriate index-url from https://pytorch.org/get-started/locally/"
-# pip3 install --no-input torch==2.0.1+cu118 torchvision==0.15.2+cu118 -f https://download.pytorch.org/whl/torch_stable.html
-pip3 install torch torchvision torchaudio # install more recent version of torch compiled against cuda 12.1
 
+# unfortunately needs to be nightly build stable torch binaries aren't built for "new" sm_89 architecture which includes my RTX 4070 (ada gen)
+pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121 # install more recent version of torch compiled against cuda 12.1
 
 echo 'Installing python packages...'
 # there as issue with installing pillow-simd through requirements - force it here
