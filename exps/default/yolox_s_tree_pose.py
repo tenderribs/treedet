@@ -22,6 +22,7 @@ class Exp(MyExp):
         self.default_sigmas = False # refers the the sigmas used in OKS formula
 
         # ---------------- dataloader config ---------------- #
+        self.train_ann = "trees_train.json"
         self.input_size = (384, 672)  # (height, width)
         # self.input_size = (480, 640)  # (height, width)
         # --------------- transform config ----------------- #
@@ -40,6 +41,7 @@ class Exp(MyExp):
         # --------------  training config --------------------- #
         # self.max_epoch = 300
         # self.eval_interval = 10
+        # self.print_interval = 25
         # -----------------  testing config ------------------ #
         self.human_pose = True
         self.visualize = False #True
@@ -159,7 +161,6 @@ class Exp(MyExp):
                 data_dir=self.data_dir,
                 json_file=self.val_ann if not testdev else self.test_ann,
                 num_kpts=self.num_kpts,
-                name="trees_val" if not testdev else "trees_test",
                 img_size=self.test_size,
                 preproc=ValTransform(legacy=legacy),
                 human_pose = self.human_pose
