@@ -7,6 +7,8 @@ import os
 import time
 from loguru import logger
 import wandb
+# from torch.profiler import profile, record_function, ProfilerActivity
+
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -261,7 +263,8 @@ class Trainer:
                 self.save_ckpt(ckpt_name="last_mosaic_epoch")
 
     def after_epoch(self):
-        self.save_ckpt(ckpt_name="latest")
+        date_time = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        self.save_ckpt(ckpt_name=f"{self.exp.exp_name}_{date_time}")
 
         if (self.epoch + 1) % self.exp.eval_interval == 0:
             all_reduce_norm(self.model)
@@ -280,47 +283,50 @@ class Trainer:
         if (self.iter + 1) % self.exp.print_interval == 0:
             # TODO check ETA logic
             left_iters = self.max_iter * self.max_epoch - (self.progress_in_iter + 1)
-            eta_seconds = self.meter["iter_time"].global_avg * left_iters
-            eta_str = "ETA: {}".format(datetime.timedelta(seconds=int(eta_seconds)))
+            # eta_seconds = self.meter["iter_time"].global_avg * left_iters
+            # eta_str = "ETA: {}".format(datetime.timedelta(seconds=int(eta_seconds)))
 
-            progress_str = "epoch: {}/{}, iter: {}/{}".format(
-                self.epoch + 1, self.max_epoch, self.iter + 1, self.max_iter
-            )
+            # progress_str = "epoch: {}/{}, iter: {}/{}".format(
+            #     self.epoch + 1, self.max_epoch, self.iter + 1, self.max_iter
+            # )
             loss_meter = self.meter.get_filtered_meter("loss")
-            loss_str = ", ".join(
-                ["{}: {:.1f}".format(k, v.latest) for k, v in loss_meter.items()]
-            )
+            # loss_str = ", ".join(
+            #     ["{}: {:.1f}".format(k, v.latest) for k, v in loss_meter.items()]
+            # )
 
-            time_meter = self.meter.get_filtered_meter("time")
-            time_str = ", ".join(
-                ["{}: {:.3f}s".format(k, v.avg) for k, v in time_meter.items()]
-            )
+            # time_meter = self.meter.get_filtered_meter("time")
+            # time_str = ", ".join(
+            #     ["{}: {:.3f}s".format(k, v.avg) for k, v in time_meter.items()]
+            # )
+            time_str = ""
 
-            logger.info(
-                "{}, mem: {:.0f}Mb, {}, {}, lr: {:.3e}".format(
-                    progress_str,
-                    gpu_mem_usage(),
-                    time_str,
-                    loss_str,
-                    self.meter["lr"].latest,
-                )
-                + (", size: {:d}, {}".format(self.input_size[0], eta_str))
-            )
+            # logger.info(
+            #     "{}, mem: {:.0f}Mb, {}, {}, lr: {:.3e}".format(
+            #         progress_str,
+            #         gpu_mem_usage(),
+            #         time_str,
+            #         loss_str,
+            #         self.meter["lr"].latest,
+            #     )
+            #     + (", size: {:d}, {}".format(self.input_size[0], eta_str))
+            # )
+            logger.info(f"epoch: {self.epoch + 1}/{self.max_epoch}, iters: {self.iter + 1}/{self.max_iter}")
 
             # log metrics to wandb
             loss_dict = {k: v.latest for k, v in loss_meter.items() if 'loss' in k}
             wandb.log({
-                "lr": self.meter["lr"].latest,
+                "lr": self.meter["lr"].avg,
                 **loss_dict
             })
 
             self.meter.clear_meters()
 
+
         # random resizing
-        if (self.progress_in_iter + 1) % 10 == 0 and not self.exp.object_pose:
-            self.input_size = self.exp.random_resize(
-                self.train_loader, self.epoch, self.rank, self.is_distributed,
-            )
+        # if (self.progress_in_iter + 1) % 10 == 0 and not self.exp.object_pose:
+        #     self.input_size = self.exp.random_resize(
+        #         self.train_loader, self.epoch, self.rank, self.is_distributed,
+        #     )
 
     @property
     def progress_in_iter(self):
