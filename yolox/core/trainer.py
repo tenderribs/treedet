@@ -233,6 +233,8 @@ class Trainer:
             config={
                 "exp_name": self.exp.exp_name,
                 "num_classes": self.exp.num_classes,
+                "batch_size": self.args.batch_size,
+                "workers": self.args.workers,
                 "depth": self.exp.depth,
                 "width": self.exp.width,
                 "data_set": self.exp.data_set,
