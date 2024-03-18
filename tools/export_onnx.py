@@ -249,6 +249,8 @@ def main(kwargs=None, exp=None):
         img = cv2.imread("../edgeai-yolox/assets/ti_mustard.png")
     elif args.dataset == 'lmo':
         img = cv2.imread("../edgeai-yolox/assets/sample_lmo_pbr.jpg")
+    elif args.dataset == "tree_kpts":
+        img = cv2.imread("../edgeai-yolox/assets/tree_kpts_sample.png.png")
     else:
         img = cv2.imread("../edgeai-yolox/assets/dog.jpg")
     img, ratio = preprocess(img, exp.test_size)
@@ -260,7 +262,7 @@ def main(kwargs=None, exp=None):
         output = model_det(img)
 
     if args.export_det:
-        torch.onnx._export(
+        torch.onnx.export(
             model_det,
             img,
             args.output_name,
