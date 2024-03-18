@@ -20,14 +20,15 @@ from google.protobuf import text_format
 
 
 import cv2
-_SUPPORTED_DATASETS = ["coco", "lm","lmo", "ycbv", "coco_kpts"]
-_NUM_CLASSES = {"coco":80, "lm":15, "lmo":8, "ycbv": 21, "coco_kpts":1}
+_SUPPORTED_DATASETS = ["coco", "lm","lmo", "ycbv", "coco_kpts", "tree_kpts"]
+_NUM_CLASSES = {"coco":80, "lm":15, "lmo":8, "ycbv": 21, "coco_kpts":1, "tree_kpts": 1}
 _VAL_ANN = {
-    "coco":"instances_val2017.json", 
+    "coco":"instances_val2017.json",
     "lm":"instances_test.json",
     "lmo":"instances_test_bop.json",
     "ycbv": "instances_test_bop.json",
     "coco_kpts": "person_keypoints_val2017.json",
+    "tree_kpts": "trees_val.json",
 }
 _TRAIN_ANN = {
     "coco":"instances_train2017.json",
@@ -35,6 +36,7 @@ _TRAIN_ANN = {
     "lmo":"instances_train.json",
     "ycbv": "instances_train.json",
     "coco_kpts": "person_keypoints_train2017.json",
+    "tree_kpts": "trees_train.json",
 }
 _SUPPORTED_TASKS = {
     "coco":["2dod"],
@@ -42,6 +44,7 @@ _SUPPORTED_TASKS = {
     "lmo":["2dod", "object_pose"],
     "ycbv":["2dod", "object_pose"],
     "coco_kpts": ["2dod", "human_pose"],
+    "tree_kpts": ["2dod", "human_pose"],
 }
 
 def make_parser():

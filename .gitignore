@@ -212,6 +212,7 @@ docs/api
 *.npy
 *.pth
 *.onnx
+*.prototxt
 *.engine
 events.out.tfevents*
 
