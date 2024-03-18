@@ -47,7 +47,7 @@ echo 'Installing python packages...'
 # there as issue with installing pillow-simd through requirements - force it here
 pip uninstall --yes pillow
 pip install --no-input -U --force-reinstall pillow-simd
-pip3 install --no-input cython wheel numpy==1.23.0
+pip3 install --no-input cython wheel numpy
 pip3 install --no-input torchinfo pycocotools opencv-python
 
 echo "installing requirements"
@@ -56,11 +56,17 @@ pip3 install --no-input -r requirements.txt
 ######################################################################
 echo "Installing mmcv"
 # pip3 install --no-input mmcv-full==1.4.8 -f https://download.openmmlab.com/mmcv/dist/cu118/torch2.0.1/index.html
-pip3 install --no-input mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/cu121/torch2.1/index.html # newer version
+# kinda sus because actually using torch v2.2, not v2.1 but whatever this project is called yolo for a reason
+pip3 install --no-input mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/cu121/torc==1.23.0h2.1/index.html # newer version
 
 ######################################################################
 # can we move this inside the requirements file is used.
-pip3 install --no-input protobuf==3.20.2 onnx==1.13.0
+# pip3 install --no-input protobuf==3.20.2 onnx==1.13.0
+pip3 install --no-input protobuf==3.20.3
+
+# add build flag, otherwise problems https://github.com/onnx/onnx/issues/4704
+export CMAKE_ARGS="-DONNX_USE_PROTOBUF_SHARED_LIBS=ON"
+pip3 install --no-input onnx
 
 ######################################################################
 echo 'installing the python package...'
