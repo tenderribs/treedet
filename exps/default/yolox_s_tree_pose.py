@@ -42,6 +42,7 @@ class Exp(MyExp):
         # self.max_epoch = 300
         # self.eval_interval = 10
         # self.print_interval = 25
+        self.basic_lr_per_img = 0.02 / 32 # batch size 32
         # -----------------  testing config ------------------ #
         self.human_pose = True
         self.visualize = False #True
