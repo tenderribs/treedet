@@ -40,13 +40,14 @@ class TREEKPTSDataset(Dataset):
             preproc: data augmentation strategy
         """
         super().__init__(img_size)
-        if data_dir is None:
-            data_dir = os.path.join(get_yolox_datadir())
-        self.data_dir = data_dir
+
+        assert data_dir is not None, "please provide a data dir in ./datasets"
+        data_basedir = os.path.join(get_yolox_datadir())
+        self.data_dir = os.path.join(data_basedir, data_dir)
         self.json_file = json_file
         self.num_kpts = 5
 
-        self.coco = COCO(os.path.join(self.data_dir, "SynthTree43k", "annotations", self.json_file))
+        self.coco = COCO(os.path.join(self.data_dir, "annotations", self.json_file))
         self.ids = self.coco.getImgIds()
         self.class_ids = sorted(self.coco.getCatIds())
         cats = self.coco.loadCats(self.coco.getCatIds())
@@ -192,7 +193,7 @@ class TREEKPTSDataset(Dataset):
     def load_image(self, index):
         file_name = self.annotations[index][3]
 
-        img_file = os.path.join(self.data_dir, self.name, file_name)
+        img_file = os.path.join(self.data_dir, file_name)
 
         img = cv2.imread(img_file)
         assert img is not None

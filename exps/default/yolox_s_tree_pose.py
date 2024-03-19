@@ -9,6 +9,23 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 
+# annotations are assumed to be placed in ./datasets/{data_subdir}/annotations/*.json
+synth43k = {
+    "data_subdir": "SynthTree43k",
+    "train_ann": "trees_train.json",
+    "test_ann": "trees_test.json",
+    "val_ann": "trees_val.json",
+}
+cana100 = {
+    "data_subdir": "CanaTree100",
+    "train_ann": "trees_train.json",
+    "test_ann": "trees_val.json", # use val for testing cuz only 500 images
+    "val_ann": "trees_val.json",
+}
+
+# select here which dataset to use for dataloader below
+dataset_src = cana100
+
 class Exp(MyExp):
     def __init__(self):
         super(Exp, self).__init__()
@@ -20,11 +37,10 @@ class Exp(MyExp):
         self.num_kpts = 5
         self.act = "relu"
         self.default_sigmas = False # refers the the sigmas used in OKS formula
-
-        # ---------------- dataloader config ---------------- #
-        self.train_ann = "trees_train.json"
-        self.input_size = (384, 672)  # (height, width)
+        self.input_size = (384, 672)    # (height, width)
         # self.input_size = (480, 640)  # (height, width)
+        # ---------------- dataloader config ---------------- #
+
         # --------------- transform config ----------------- #
         # self.mosaic_prob = 0.0
         # self.mixup_prob = 0.0
@@ -47,10 +63,6 @@ class Exp(MyExp):
         self.human_pose = True
         self.visualize = False #True
         self.od_weights = None
-
-        self.data_set = "tree_kpts"
-        self.val_ann = "trees_val.json" # resides in /annotations folder
-        self.test_ann = "trees_test.json"
         self.test_size = self.input_size
     def get_model(self):
         from yolox.models import YOLOX, YOLOPAFPN, YOLOXHeadKPTS
@@ -91,18 +103,17 @@ class Exp(MyExp):
         local_rank = get_local_rank()
 
         with wait_for_the_master(local_rank):
-            if self.data_set == "tree_kpts":
-                dataset = TREEKPTSDataset(
-                    data_dir=self.data_dir,
-                    json_file=self.train_ann,
-                    num_kpts=self.num_kpts,
-                    preproc=TrainTransform(
-                        max_labels=50,
-                        flip_prob=self.flip_prob,
-                        hsv_prob=self.hsv_prob,
-                        num_kpts=self.num_kpts),
-                    cache=cache_img,
-                )
+            dataset = TREEKPTSDataset(
+                data_dir=dataset_src["data_subdir"],
+                json_file=dataset_src["train_ann"],
+                num_kpts=self.num_kpts,
+                preproc=TrainTransform(
+                    max_labels=50,
+                    flip_prob=self.flip_prob,
+                    hsv_prob=self.hsv_prob,
+                    num_kpts=self.num_kpts),
+                cache=cache_img,
+            )
 
 
         dataset = MosaicDetection(
@@ -157,15 +168,14 @@ class Exp(MyExp):
     def get_eval_loader(self, batch_size, is_distributed, testdev=False, legacy=False):
         from yolox.data import TREEKPTSDataset, ValTransform
 
-        if self.data_set == "tree_kpts":
-            valdataset = TREEKPTSDataset(
-                data_dir=self.data_dir,
-                json_file=self.val_ann if not testdev else self.test_ann,
-                num_kpts=self.num_kpts,
-                img_size=self.test_size,
-                preproc=ValTransform(legacy=legacy),
-                human_pose = self.human_pose
-            )
+        valdataset = TREEKPTSDataset(
+            data_dir=dataset_src["data_subdir"],
+            json_file=dataset_src["val_ann"] if not testdev else dataset_src["test_ann"],
+            num_kpts=self.num_kpts,
+            img_size=self.test_size,
+            preproc=ValTransform(legacy=legacy),
+            human_pose = self.human_pose
+        )
 
         if is_distributed:
             batch_size = batch_size // dist.get_world_size()
