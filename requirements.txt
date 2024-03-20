@@ -21,6 +21,7 @@ seaborn==0.11.2
 # onnx-simplifier==0.4.10
 # onnx-simplifier
 # onnxsim
+onnxruntime
 
 # Extra packages required for 6d pose estimation
 plyfile==0.7.4

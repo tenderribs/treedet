@@ -57,7 +57,7 @@ pip3 install --no-input -r requirements.txt
 echo "Installing mmcv"
 # pip3 install --no-input mmcv-full==1.4.8 -f https://download.openmmlab.com/mmcv/dist/cu118/torch2.0.1/index.html
 # kinda sus because actually using torch v2.2, not v2.1 but whatever this project is called yolo for a reason
-pip3 install --no-input mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/cu121/torc==1.23.0h2.1/index.html # newer version
+# pip3 install --no-input mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/cu121/torc==1.23.0h2.1/index.html # newer version
 
 ######################################################################
 # can we move this inside the requirements file is used.
