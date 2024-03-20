@@ -12,10 +12,10 @@ python3 tools/export_onnx.py \
 
 # run inference
 python3 kpts_onnx_inference.py \
-    --model pretrained_models/yolox_s_tree_pose.onnx \
+    --model pretrained_models/yolox_s_cana100_tree_pose.onnx \
     --output_dir YOLOX_outputs/inference \
-    --score_thr 0.8 \
-    --image_path ./datasets/mark_forest/IMG_20240318_124218.png
+    --images_path ./datasets/mark_forest \
+    --score_thr 0.8
 
 python3 -m yolox.tools.train -n yolox_s_tree_pose --task human_pose --dataset tree_kpts -b 32 --fp16 --occupy\
     -c './pretrained_models/2024-03-18_synth43_best.pth' --workers 12
