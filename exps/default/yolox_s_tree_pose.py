@@ -9,38 +9,25 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 
-# annotations are assumed to be placed in ./datasets/{data_subdir}/annotations/*.json
-synth43k = {
-    "data_subdir": "SynthTree43k",
-    "train_ann": "trees_train.json",
-    "test_ann": "trees_test.json",
-    "val_ann": "trees_val.json",
-}
-cana100 = {
-    "data_subdir": "CanaTree100",
-    "train_ann": "trees_train.json",
-    "test_ann": "trees_val.json", # use val for testing cuz only 500 images
-    "val_ann": "trees_val.json",
-}
-
-# select here which dataset to use for dataloader below
-dataset_src = cana100
-
 class Exp(MyExp):
     def __init__(self):
         super(Exp, self).__init__()
+        self.device_type = 'cuda'
+
         # ---------------- model config ---------------- #
         self.depth = 0.33
         self.width = 0.50
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
         self.num_classes = 1 # just trees
         self.num_kpts = 5
-        self.act = "relu"
         self.default_sigmas = False # refers the the sigmas used in OKS formula
         self.input_size = (384, 672)    # (height, width)
-        # self.input_size = (480, 640)  # (height, width)
-        # ---------------- dataloader config ---------------- #
 
+        # ---------------- dataloader config ---------------- #
+        self.data_subdir = "SynthTree43k"
+        self.train_ann = "trees_train.json"
+        self.test_ann = "trees_test.json"
+        self.val_ann = "trees_val.json"
         # --------------- transform config ----------------- #
         # self.mosaic_prob = 0.0
         # self.mixup_prob = 0.0
@@ -55,10 +42,10 @@ class Exp(MyExp):
         # self.enable_mixup = False
         # self.shape_loss = False
         # --------------  training config --------------------- #
-        # self.max_epoch = 300
+        self.max_epoch = 100
         # self.eval_interval = 10
         # self.print_interval = 25
-        self.basic_lr_per_img = 0.02 / 32 # batch size 32
+        self.basic_lr_per_img = 0.02 / 64 # batch size 32
         # -----------------  testing config ------------------ #
         self.human_pose = True
         self.visualize = False #True
@@ -104,8 +91,8 @@ class Exp(MyExp):
 
         with wait_for_the_master(local_rank):
             dataset = TREEKPTSDataset(
-                data_dir=dataset_src["data_subdir"],
-                json_file=dataset_src["train_ann"],
+                data_dir=self.data_subdir,
+                json_file=self.train_ann,
                 num_kpts=self.num_kpts,
                 preproc=TrainTransform(
                     max_labels=50,
@@ -124,8 +111,6 @@ class Exp(MyExp):
                 max_labels=120,
                 flip_prob=self.flip_prob,
                 hsv_prob=self.hsv_prob,
-                object_pose=self.object_pose,
-                human_pose=self.human_pose,
                 flip_index=dataset.flip_index,
                 num_kpts=self.num_kpts,
             ),
@@ -169,12 +154,11 @@ class Exp(MyExp):
         from yolox.data import TREEKPTSDataset, ValTransform
 
         valdataset = TREEKPTSDataset(
-            data_dir=dataset_src["data_subdir"],
-            json_file=dataset_src["val_ann"] if not testdev else dataset_src["test_ann"],
+            data_dir=self.data_subdir,
+            json_file=self.val_ann if not testdev else self.test_ann,
             num_kpts=self.num_kpts,
             img_size=self.test_size,
             preproc=ValTransform(legacy=legacy),
-            human_pose = self.human_pose
         )
 
         if is_distributed:
@@ -200,19 +184,17 @@ class Exp(MyExp):
 
         val_loader = self.get_eval_loader(batch_size, is_distributed, testdev, legacy)
         output_dir = os.path.join(self.output_dir, self.exp_name)
-        if self.human_pose:
-            evaluator = COCOHumanPoseEvaluator(
-                dataloader=val_loader,
-                img_size=self.test_size,
-                confthre=self.test_conf,
-                nmsthre=self.nmsthre,
-                num_classes=self.num_classes,
-                testdev=testdev,
-                human_pose=self.human_pose,
-                visualize=self.visualize,
-                output_dir=output_dir,
-                num_kpts=self.num_kpts,
-                default_sigmas=self.default_sigmas,
-                device_type=self.device_type
-            )
+        evaluator = COCOHumanPoseEvaluator(
+            dataloader=val_loader,
+            img_size=self.test_size,
+            confthre=self.test_conf,
+            nmsthre=self.nmsthre,
+            num_classes=self.num_classes,
+            testdev=testdev,
+            visualize=self.visualize,
+            output_dir=output_dir,
+            num_kpts=self.num_kpts,
+            default_sigmas=self.default_sigmas,
+            device_type=self.device_type
+        )
         return evaluator

@@ -11,8 +11,6 @@ from yolox.utils import adjust_box_anns, adjust_kpts_anns, get_local_rank
 
 from ..data_augment import random_affine
 from .datasets_wrapper import Dataset
-from .ycbv import YCBVDataset
-from .lmo import LMODataset
 
 
 def get_mosaic_coordinate(mosaic_image, mosaic_index, xc, yc, w, h, input_h, input_w):
@@ -42,7 +40,7 @@ class MosaicDetection(Dataset):
         self, dataset, img_size, mosaic=True, preproc=None,
         degrees=10.0, translate=0.1, mosaic_scale=(0.5, 1.5),
         mixup_scale=(0.5, 1.5), shear=2.0, enable_mixup=True,
-        mosaic_prob=1.0, mixup_prob=1.0, num_kpts=17, *args
+        mosaic_prob=1.0, mixup_prob=1.0, num_kpts=5, *args
     ):
         """
 
@@ -125,9 +123,8 @@ class MosaicDetection(Dataset):
                     labels[:, 1] = scale * _labels[:, 1] + padh
                     labels[:, 2] = scale * _labels[:, 2] + padw
                     labels[:, 3] = scale * _labels[:, 3] + padh
-                    if self.preproc.human_pose:
-                        labels[:, 5::2][labels[:, 5::2]!=0] = scale * _labels[:, 5::2][labels[:, 5::2]!=0] + padw
-                        labels[:, 6::2][labels[:, 6::2]!=0] = scale * _labels[:, 6::2][labels[:, 6::2]!=0] + padh
+                    labels[:, 5::2][labels[:, 5::2]!=0] = scale * _labels[:, 5::2][labels[:, 5::2]!=0] + padw
+                    labels[:, 6::2][labels[:, 6::2]!=0] = scale * _labels[:, 6::2][labels[:, 6::2]!=0] + padh
                 mosaic_labels.append(labels)
 
             # concat all labels in a single array
@@ -137,9 +134,8 @@ class MosaicDetection(Dataset):
                 np.clip(mosaic_labels[:, 1], 0, 2 * input_h, out=mosaic_labels[:, 1])
                 np.clip(mosaic_labels[:, 2], 0, 2 * input_w, out=mosaic_labels[:, 2])
                 np.clip(mosaic_labels[:, 3], 0, 2 * input_h, out=mosaic_labels[:, 3])
-                if self.preproc.human_pose:
-                    np.clip(mosaic_labels[:, 5::2], 0, 2 * input_w, out=mosaic_labels[:, 5::2])
-                    np.clip(mosaic_labels[:, 6::2], 0, 2 * input_h, out=mosaic_labels[:, 6::2])
+                np.clip(mosaic_labels[:, 5::2], 0, 2 * input_w, out=mosaic_labels[:, 5::2])
+                np.clip(mosaic_labels[:, 6::2], 0, 2 * input_h, out=mosaic_labels[:, 6::2])
 
             mosaic_img, mosaic_labels = random_affine(
                 mosaic_img,
@@ -149,7 +145,6 @@ class MosaicDetection(Dataset):
                 translate=self.translate,
                 scales=self.scale,
                 shear=self.shear,
-                human_pose=self.preproc.human_pose,
                 num_kpts=self.num_kpts
             )  # border to remove
 
@@ -161,7 +156,7 @@ class MosaicDetection(Dataset):
                 and not len(mosaic_labels) == 0
                 and random.random() < self.mixup_prob
             ):
-                mosaic_img, mosaic_labels = self.mixup(mosaic_img, mosaic_labels, self.input_dim, human_pose=self.preproc.human_pose)
+                mosaic_img, mosaic_labels = self.mixup(mosaic_img, mosaic_labels, self.input_dim)
             mix_img, padded_labels = self.preproc(mosaic_img, mosaic_labels, self.input_dim)
             img_info = (mix_img.shape[1], mix_img.shape[0])
 
@@ -174,38 +169,10 @@ class MosaicDetection(Dataset):
         else:
             self._dataset._input_dim = self.input_dim
             img, label, img_info, img_id = self._dataset.pull_item(idx)
-            if isinstance(self._dataset, YCBVDataset):
-                img_index = list(self._dataset.imgs_coco)[img_id]
-                image_folder = self._dataset.imgs_coco[int(img_index)]['image_folder']
-                if int(image_folder)<60:
-                    camera_matrix = self._dataset.cad_models.camera_matrix['camera_uw']
-                else:
-                    camera_matrix = self._dataset.cad_models.camera_matrix['camera_cmu']
-            elif isinstance(self._dataset, LMODataset):
-                camera_matrix = self._dataset.cad_models.camera_matrix
-            else:
-                camera_matrix = None
-            if isinstance(self._dataset, (YCBVDataset, LMODataset)) and self.enable_mosaic:  # no aug training for 6d pose estimation.
-                img, label = random_affine(
-                    img,
-                    label,
-                    target_size=self.input_dim,
-                    degrees=self.degrees,
-                    translate=self.translate,
-                    scales=self.scale,
-                    shear=self.shear,
-                    human_pose=self.preproc.human_pose,
-                    object_pose= self.preproc.object_pose,
-                    camera_matrix=camera_matrix
-                )  # border to remove
-            #if self.preproc is not None: #Temporary fix
-            #    img, label = self.preproc(img, label, self.input_dim)
             img, label = self.preproc(img, label, self.input_dim)
-            #if self._dataset.pose:
-            #    label = np
             return img, label, img_info, img_id
 
-    def mixup(self, origin_img, origin_labels, input_dim, human_pose=False):
+    def mixup(self, origin_img, origin_labels, input_dim):
         jit_factor = random.uniform(*self.mixup_scale)
         flip_prob = self.preproc.flip_prob if self.preproc else 0.0
         FLIP = random.uniform(0, 1) < flip_prob
@@ -271,30 +238,26 @@ class MosaicDetection(Dataset):
             cp_bboxes_transformed_np[:, 1::2] - y_offset, 0, target_h
         )
 
-        if human_pose:
-            cp_kpt_origin_np = adjust_kpts_anns(
-                cp_labels[:, 5:].copy(), cp_scale_ratio, 0, 0, origin_w, origin_h
-            )
-            if FLIP:
-                cp_kpt_origin_np[:, 0::2] = (origin_w - cp_kpt_origin_np[:, 0::2])*(cp_kpt_origin_np[:, 0::2]!=0)
-                cp_kpt_origin_np[:, 0::2] = cp_kpt_origin_np[:, 0::2][:, self.preproc.flip_index]
-                cp_kpt_origin_np[:, 1::2] = cp_kpt_origin_np[:, 1::2][:, self.preproc.flip_index]
+        cp_kpt_origin_np = adjust_kpts_anns(
+            cp_labels[:, 5:].copy(), cp_scale_ratio, 0, 0, origin_w, origin_h
+        )
+        if FLIP:
+            cp_kpt_origin_np[:, 0::2] = (origin_w - cp_kpt_origin_np[:, 0::2])*(cp_kpt_origin_np[:, 0::2]!=0)
+            cp_kpt_origin_np[:, 0::2] = cp_kpt_origin_np[:, 0::2][:, self.preproc.flip_index]
+            cp_kpt_origin_np[:, 1::2] = cp_kpt_origin_np[:, 1::2][:, self.preproc.flip_index]
 
-            cp_kpt_transformed_np = cp_kpt_origin_np.copy()
-            cp_kpt_transformed_np[:, 0::2] = np.clip(
-                cp_kpt_transformed_np[:, 0::2] - x_offset, 0, target_w
-            )
-            cp_kpt_transformed_np[:, 1::2] = np.clip(
-                cp_kpt_transformed_np[:, 1::2] - y_offset, 0, target_h
-            )
+        cp_kpt_transformed_np = cp_kpt_origin_np.copy()
+        cp_kpt_transformed_np[:, 0::2] = np.clip(
+            cp_kpt_transformed_np[:, 0::2] - x_offset, 0, target_w
+        )
+        cp_kpt_transformed_np[:, 1::2] = np.clip(
+            cp_kpt_transformed_np[:, 1::2] - y_offset, 0, target_h
+        )
 
         cls_labels = cp_labels[:, 4:5].copy()
         box_labels = cp_bboxes_transformed_np
-        if not human_pose:
-            labels = np.hstack((box_labels, cls_labels))
-        else:
-            kpt_label = cp_kpt_transformed_np.copy()
-            labels = np.hstack((box_labels, cls_labels, kpt_label))
+        kpt_label = cp_kpt_transformed_np.copy()
+        labels = np.hstack((box_labels, cls_labels, kpt_label))
         origin_labels = np.vstack((origin_labels, labels))
         origin_img = origin_img.astype(np.float32)
         origin_img = 0.5 * origin_img + 0.5 * padded_cropped_img.astype(np.float32)
