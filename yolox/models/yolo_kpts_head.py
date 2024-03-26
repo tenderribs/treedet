@@ -315,7 +315,11 @@ class YOLOXHeadKPTS(nn.Module):
 
         outputs[..., :2] = (outputs[..., :2] + grids) * strides
         outputs[..., 2:4] = torch.exp(outputs[..., 2:4]) * strides
-        #outputs[...,  6:] = (outputs[..., 6:] + kpt_grids.repeat(1,1,self.num_kpts)) * strides
+
+        # In the network forward pass, we learn the keypoints loss relative to the scaling 2 * outputs - 0.5
+        # the logic is explained here: https://github.com/ultralytics/yolov5/issues/1585#issuecomment-739060912
+        #
+        # TL;DR: factor 2 gives more range to sigmoid output, -0.5 centers output range around 0.5
         outputs[...,  6:] = (2*outputs[..., 6:] - 0.5  + kpt_grids.repeat(1,1,self.num_kpts)) * strides
 
         # convert kpts conf to probabilities
@@ -799,14 +803,23 @@ class YOLOXHeadKPTS(nn.Module):
 
     def kpts_loss(self, kpts_preds, kpts_targets, bbox_targets):
         sigmas = self.sigmas.to(device=kpts_preds.device)
+
+        # preds are in format [x,y,conf] * num_kpts, targs as [x,y] * num_kpts
         kpts_preds_x, kpts_targets_x = kpts_preds[:, 0::3], kpts_targets[:, 0::2]
         kpts_preds_y, kpts_targets_y = kpts_preds[:, 1::3], kpts_targets[:, 1::2]
         kpts_preds_score = kpts_preds[:, 2::3]
-        # mask
+
+        # mask of visible kpts
         kpt_mask = (kpts_targets[:, 0::2] != 0)
+
+        # calculate visibility loss (l_{kpts_conf} in paper) based on binary cross entropy
+        # using ground truth visibility as ground truth
         lkptv = self.bcewithlog_loss(kpts_preds_score, kpt_mask.float()).mean(axis=1)
+
         # OKS based loss
         d = (kpts_preds_x - kpts_targets_x) ** 2 + (kpts_preds_y - kpts_targets_y) ** 2
+
+        # scale derived from bbox gt area (w * h)
         bbox_scale = torch.prod(bbox_targets[:, -2:], dim=1, keepdim=True)  #scale derived from bbox gt
         kpt_loss_factor = (torch.sum(kpt_mask != 0) + torch.sum(kpt_mask == 0)) / torch.sum(kpt_mask != 0)
         oks = torch.exp(-d / (bbox_scale * (4 * sigmas**2) + 1e-9))

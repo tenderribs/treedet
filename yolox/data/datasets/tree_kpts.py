@@ -81,7 +81,6 @@ class TREEKPTSDataset(Dataset):
             "\n********************************************************************************\n"
             "You are using cached images in RAM to accelerate training.\n"
             "This requires large system RAM.\n"
-            "Make sure you have 200G+ RAM and 136G available disk space for training COCO.\n"
             "********************************************************************************\n"
         )
         max_h = self.img_size[0]
@@ -133,14 +132,12 @@ class TREEKPTSDataset(Dataset):
         for obj in annotations:
             x1 = np.max((0, obj["bbox"][0]))
             y1 = np.max((0, obj["bbox"][1]))
+
+            # convert from [xywh] to [xyxy] notation
             x2 = np.min((width, x1 + np.max((0, obj["bbox"][2]))))
             y2 = np.min((height, y1 + np.max((0, obj["bbox"][3]))))
             if obj["area"] > 0 and x2 >= x1 and y2 >= y1 and obj['num_keypoints']>0:
                 obj["clean_bbox"] = [x1, y1, x2, y2]
-                # assert np.all(0 <= np.array(obj['keypoints'][0::3])), print(np.array(obj['keypoints'][0::3]))
-                # assert np.all(np.array(obj['keypoints'][0::3]) <= width), print(np.array(obj['keypoints'][0::3]))
-                # assert np.all(0 <= np.array(obj['keypoints'][1::3])), print(np.array(obj['keypoints'][1::3]))
-                # assert np.all(np.array(obj['keypoints'][1::3]) <= height), print(np.array(obj['keypoints'][1::3]))
                 obj["clean_kpts"] =  obj['keypoints']
                 objs.append(obj)
         num_objs = len(objs)
@@ -183,11 +180,16 @@ class TREEKPTSDataset(Dataset):
     def load_resized_img(self, index):
         img = self.load_image(index)
         r = min(self.img_size[0] / img.shape[0], self.img_size[1] / img.shape[1])
-        resized_img = cv2.resize(
-            img,
-            (int(img.shape[1] * r), int(img.shape[0] * r)),
-            interpolation=cv2.INTER_LINEAR,
-        ).astype(np.uint8)
+        if r == 1:
+            # If the image is not already np.uint8, convert it; otherwise, use as is.
+            resized_img = img.astype(np.uint8) if img.dtype != np.uint8 else img
+        else:
+            # Proceed with resizing only if r != 1.
+            resized_img = cv2.resize(
+                img,
+                (int(img.shape[1] * r), int(img.shape[0] * r)),
+                interpolation=cv2.INTER_LINEAR,
+            ).astype(np.uint8)
         return resized_img
 
     def load_image(self, index):

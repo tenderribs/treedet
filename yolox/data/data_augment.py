@@ -192,10 +192,14 @@ def random_affine(
 def _mirror(image, boxes, prob=0.5, human_pose=False, object_pose=False, human_kpts=None, flip_index=None):
     _, width, _ = image.shape
     if random.random() < prob or object_pose:
+        # flip image vertical (invert cols order)
         image = image[:, ::-1]
+
+        # invert bbox cx and w w.r.t width
         boxes[:, 0::2] = width - boxes[:, 2::-2]
         if human_pose:
             human_kpts[:, 0::2] = (width - human_kpts[:, 0::2])*(human_kpts[:, 0::2]!=0)
+            # semantically flip, i.e. left and right labelled need flipping
             human_kpts[:, 0::2] = human_kpts[:, 0::2][:, flip_index]
             human_kpts[:, 1::2] = human_kpts[:, 1::2][:, flip_index]
     if human_pose:
@@ -205,6 +209,7 @@ def _mirror(image, boxes, prob=0.5, human_pose=False, object_pose=False, human_k
 
 
 def preproc(img, input_size, swap=(2, 0, 1)):
+    # initialize padded image with "neutral" color 114
     if len(img.shape) == 3:
         padded_img = np.ones((input_size[0], input_size[1], 3), dtype=np.uint8) * 114
     else:
@@ -216,9 +221,14 @@ def preproc(img, input_size, swap=(2, 0, 1)):
         (int(img.shape[1] * r), int(img.shape[0] * r)),
         interpolation=cv2.INTER_LINEAR,
     ).astype(np.uint8)
+
+    # place the resized image in top left corner of padded_img
     padded_img[: int(img.shape[0] * r), : int(img.shape[1] * r)] = resized_img
 
+    # change from (height, width, channels) to (channels, height, width)
     padded_img = padded_img.transpose(swap)
+
+    # ensure mem is contig. for performance reasons
     padded_img = np.ascontiguousarray(padded_img, dtype=np.float32)
     return padded_img, r
 
@@ -253,6 +263,7 @@ class TrainTransform:
             image, r_o = preproc(image, input_dim)
             return image, targets
 
+        # create copies to manipulate
         image_o = image.copy()
         targets_o = targets.copy()
         height_o, width_o, _ = image_o.shape
@@ -262,6 +273,7 @@ class TrainTransform:
             object_poses_o = targets_o[:, 5:14]
         elif self.human_pose:
             human_kpts_o = targets_o[:, 5:]
+
         # bbox_o: [xyxy] to [c_x,c_y,w,h]
         boxes_o = xyxy2cxcywh(boxes_o)
 
@@ -304,12 +316,15 @@ class TrainTransform:
 
         labels_t = np.expand_dims(labels_t, 1)
 
+        # ensure labels and targets are in correct dimensions for concatenation
         if self.object_pose:
             targets_t = np.hstack((labels_t, boxes_t, object_poses_t))
         elif self.human_pose:
             targets_t = np.hstack((labels_t, boxes_t, human_kpts_t))
         else:
             targets_t = np.hstack((labels_t, boxes_t))
+
+        # concat labels, boxes, kpts
         padded_labels = np.zeros((self.max_labels, self.target_size))
         padded_labels[range(len(targets_t))[: self.max_labels]] = targets_t[
             : self.max_labels
