@@ -98,82 +98,6 @@ def make_parser():
     )
     return parser
 
-
-def prepare_layer_output_names(onnx_model, export_layer_types=None, match_layer=None, return_layer=None):
-    layer_output_names = []
-    for i in range(len(onnx_model.graph.node)):
-        node_inputs = onnx_model.graph.node[i].input
-        if (onnx_model.graph.node[i].op_type in export_layer_types) and (len(node_inputs) >= 3):
-            for j in range(len(onnx_model.graph.node)):
-                if node_inputs[0] in onnx_model.graph.node[j].output:
-                    if onnx_model.graph.node[j].op_type == match_layer:
-                        if return_layer not in export_layer_types:
-                            if onnx_model.graph.node[i].output[0] not in layer_output_names:
-                                layer_output_names.append(onnx_model.graph.node[j].output[0])
-                        else:
-                            if onnx_model.graph.node[j].output[0] not in layer_output_names:
-                                layer_output_names.append(onnx_model.graph.node[i].output[0])
-
-    return layer_output_names
-
-
-def export_prototxt(model, img, onnx_model_name, task=None):
-    # Prototxt export for a given ONNX model
-    onnx_model = onnx.load(onnx_model_name)
-    anchor_grid = model.head.strides
-    num_heads = len(model.head.strides)
-    num_keypoint = model.head.num_kpts if hasattr(model.head, "num_kpts") else None
-    keypoint_confidence = True if (num_keypoint is not None and num_keypoint>0) else None
-    keep_top_k = 20 if (num_keypoint is not None and num_keypoint>0) else 200
-    names = prepare_layer_output_names(onnx_model, export_layer_types='Concat', match_layer='Conv', return_layer='Concat')
-    # matched_names = retrieve_onnx_names(img, model, onnx_model_name)
-    matched_names = names
-    prototxt_name = onnx_model_name.replace('onnx', 'prototxt')
-
-    background_label_id = -1
-    num_classes = model.head.num_classes
-    assert len(matched_names) == num_heads; "There must be a matched name for each head"
-    proto_names = [f'{matched_names[i]}' for i in range(num_heads)]
-    yolo_params = []
-    for head_id in range(num_heads):
-        yolo_param = tidl_meta_arch_yolox_pb2.TIDLYoloParams(input=proto_names[head_id],
-                                                        anchor_width=[anchor_grid[head_id]],
-                                                        anchor_height=[anchor_grid[head_id]])
-        yolo_params.append(yolo_param)
-    nms_param = tidl_meta_arch_yolox_pb2.TIDLNmsParam(nms_threshold=0.65, top_k=500)
-    #Use camera intrinsic parameters only for object pose models.
-    if task == 'object_pose':
-        if isinstance(model.head.cad_models.camera_matrix, dict):
-            camera_matrix = list(model.head.cad_models.camera_matrix.values())[0]
-        else:
-            camera_matrix = model.head.cad_models.camera_matrix
-        fx, fy = camera_matrix[0], camera_matrix[4]
-        px, py = camera_matrix[2], camera_matrix[5]
-        camera_intrinsic_params = tidl_meta_arch_yolox_pb2.TIDLCameraIntrinsicParams(fx=fx, fy=fy, px=px, py=py)
-        sub_code_type = 1
-        name = 'yolox_object_pose'
-    else:
-        camera_intrinsic_params = None
-        name = 'yolox'
-        sub_code_type = None
-    detection_output_param = tidl_meta_arch_yolox_pb2.TIDLOdPostProc(num_classes=num_classes, share_location=True,
-                                            background_label_id=background_label_id, nms_param=nms_param, camera_intrinsic_params=camera_intrinsic_params,
-                                            code_type=tidl_meta_arch_yolox_pb2.CODE_TYPE_YOLO_X, keep_top_k=keep_top_k, sub_code_type=sub_code_type,
-                                            confidence_threshold=0.01, num_keypoint=num_keypoint, keypoint_confidence=keypoint_confidence)
-
-    yolov3 = tidl_meta_arch_yolox_pb2.TidlYoloOd(name=name, output=["detections"],
-                                            in_width=img.shape[3], in_height=img.shape[2],
-                                            yolo_param=yolo_params,
-                                            detection_output_param=detection_output_param,
-                                            )
-    arch = tidl_meta_arch_yolox_pb2.TIDLMetaArch(name=name, tidl_yolo=[yolov3])
-
-    with open(prototxt_name, 'wt') as pfile:
-        txt_message = text_format.MessageToString(arch)
-        pfile.write(txt_message)
-
-
-
 @logger.catch
 def main(kwargs=None, exp=None):
     args = make_parser().parse_args()
@@ -230,16 +154,7 @@ def main(kwargs=None, exp=None):
     if not args.export_det:
         model.head.decode_in_inference = False
     if args.export_det:
-        if args.task == "object_pose":
-            if args.dataset == 'ycbv':
-                camera_matrix = model.head.cad_models.camera_matrix['camera_uw']  #camera_matrix for val split
-            elif args.dataset == 'lmo' or args.dataset == "lm":
-                camera_matrix = model.head.cad_models.camera_matrix
-            post_process = PostprocessExport(conf_thre=0.4, nms_thre=0.01, num_classes=exp.num_classes, object_pose=True, camera_matrix=camera_matrix)
-        elif args.task == "human_pose":
-            post_process = PostprocessExport(conf_thre=0.05, nms_thre=0.45, num_classes=exp.num_classes, task=args.task)
-        else:
-            post_process = PostprocessExport(conf_thre=0.25, nms_thre=0.45, num_classes=exp.num_classes)
+        post_process = PostprocessExport(conf_thre=0.8, num_classes=exp.num_classes, task=args.task)
         model_det = nn.Sequential(model, post_process)
         model_det.eval()
         args.output = 'detections'
@@ -304,25 +219,6 @@ def main(kwargs=None, exp=None):
     else:
         import onnx
         onnx.shape_inference.infer_shapes_path(args.output_name, args.output_name)
-
-    export_prototxt(model, img, args.output_name, args.task)
-    logger.info("generated prototxt {}".format(args.output_name.replace('onnx', 'prototxt')))
-
-
-def run_export(**kwargs):
-    logger.info("kwargs value: {}".format(kwargs))
-    exp = get_exp(None, kwargs['name'])
-    exp.max_epoch = kwargs['max_epoch']
-    exp.warmup_epochs = max(min(exp.warmup_epochs, exp.max_epoch//4), 1)
-    exp.no_aug_epochs = max(min(exp.no_aug_epochs, exp.max_epoch//4), 1)
-    exp.output_dir = kwargs['output_dir']
-    with open(kwargs['train_ann']) as train_ann_fp:
-        train_anno = json.load(train_ann_fp)
-        categories = train_anno['categories']
-        exp.num_kpts = len(categories[0]['keypoints'])
-
-    main(kwargs=kwargs, exp=exp)
-
 
 if __name__ == "__main__":
     main()

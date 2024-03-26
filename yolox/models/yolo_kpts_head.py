@@ -316,6 +316,8 @@ class YOLOXHeadKPTS(nn.Module):
         outputs[..., 2:4] = torch.exp(outputs[..., 2:4]) * strides
         #outputs[...,  6:] = (outputs[..., 6:] + kpt_grids.repeat(1,1,self.num_kpts)) * strides
         outputs[...,  6:] = (2*outputs[..., 6:] - 0.5  + kpt_grids.repeat(1,1,self.num_kpts)) * strides
+
+        outputs[..., 8::3] = torch.sigmoid(outputs[..., 8::3])
         return outputs
 
     def get_losses(

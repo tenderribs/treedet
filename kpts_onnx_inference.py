@@ -93,8 +93,8 @@ if __name__ == '__main__':
         dets[:, 6::3] /= ratio # rescale x of kpts
         dets[:, 7::3] /= ratio # rescale y of kpts
 
-        sig = lambda x : 1/(1 + np.exp(-x))
-        dets[:, 8::3] = sig(dets[:, 8::3]) # convert logit to prob
+        # sig = lambda x : 1/(1 + np.exp(-x))
+        # dets[:, 8::3] = sig(dets[:, 8::3]) # convert logit to prob
 
         if dets is not None:
             final_boxes, final_scores, final_cls_inds = dets[:, :4], dets[:, 4], dets[:, 5]
@@ -111,8 +111,9 @@ if __name__ == '__main__':
                         print(f"{label}\t\tx: {x}\ty:{y}\tkptconf:\t{conf}")
                         cv2.circle(origin_img, (int(x), int(y)), radius=2, color=(255, 0, 0), thickness=-1)
 
-        # mkdir(args.output_dir)
-        # output_path = os.path.join(args.output_dir, image_file)
-        # cv2.imwrite(output_path, origin_img)
+        mkdir(args.output_dir)
+        output_path = os.path.join(args.output_dir, image_file)
+        print(output_path)
+        cv2.imwrite(output_path, origin_img)
 
     print(f"total_inference: {total_inference}, {len(image_files)} images, avg {total_inference / len(image_files)}")
