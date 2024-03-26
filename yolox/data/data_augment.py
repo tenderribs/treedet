@@ -51,6 +51,7 @@ def get_affine_matrix(
     translate=0.1,
     scales=0.1,
     shear=10,
+    object_pose=False,
     camera_matrix= None
 ):
     twidth, theight = target_size
@@ -61,8 +62,11 @@ def get_affine_matrix(
 
     if scale <= 0.0:
         raise ValueError("Argument scale should be positive")
-
-    R = cv2.getRotationMatrix2D(angle=angle, center=(0, 0), scale=scale)
+    if object_pose:
+        center = (camera_matrix[2], camera_matrix[5])
+        R = cv2.getRotationMatrix2D(angle=angle, center=center, scale=scale) #Rotate around the principle axis
+    else:
+        R = cv2.getRotationMatrix2D(angle=angle, center=(0, 0), scale=scale)
 
     M = np.ones([2, 3])
     # Shear
@@ -134,6 +138,29 @@ def apply_affine_to_kpts(targets, target_size, M, scale, num_kpts=17):
 
     return targets
 
+def apply_affine_to_object_pose(targets, target_size, M, scale, angle):
+    num_gts = len(targets)
+    # warp object center points [tx, ty]
+    twidth, theight = target_size
+    target_kpts = np.ones((num_gts, 3))
+    target_kpts[:, :2] = targets[:, -3:-1]
+    target_kpts = target_kpts @ M.T  # transform
+    targets[:, -3:-1] = target_kpts
+    #transform Rotation
+    r1 = targets[:, -9:-6, None]
+    r2 = targets[:, -6:-3, None]
+    r3 = np.cross(r1, r2, axis=1)
+    rotation_mat = np.concatenate((r1, r2, r3), axis=-1)
+    deltaR = cv2.getRotationMatrix2D(angle=angle, center=(0, 0), scale=1.0)
+    deltaR = np.vstack( (deltaR, np.array([[0, 0, 1.0]])) )
+    rotation_mat = deltaR @ rotation_mat
+    targets[:, -9:-6] = rotation_mat[:, :, 0]
+    targets[:, -6:-3] = rotation_mat[:, :, 1]
+    # transform depth
+    # There is no change in depth for rotation around z axis. Scaling reduces depth by the amount of scaling
+    targets[:, -1] = targets[:, -1] / scale
+    return targets
+
 
 def random_affine(
     img,
@@ -143,34 +170,42 @@ def random_affine(
     translate=0.1,
     scales=0.1,
     shear=10,
+    human_pose=False,
+    object_pose=False,
+    camera_matrix=None,
     num_kpts=17
 ):
-    M, scale, angle = get_affine_matrix((target_size[1],target_size[0]), degrees, translate, scales, shear)
+    M, scale, angle = get_affine_matrix((target_size[1],target_size[0]), degrees, translate, scales, shear, object_pose, camera_matrix)
 
     img = cv2.warpAffine(img, M, dsize=(target_size[1],target_size[0]), borderValue=(114, 114, 114))
 
     # Transform label coordinates
     if len(targets) > 0:
         targets = apply_affine_to_bboxes(targets, (target_size[1],target_size[0]), M, scale)
-        targets = apply_affine_to_kpts(targets, target_size, M, scale, num_kpts=num_kpts)
+        if human_pose:
+            targets = apply_affine_to_kpts(targets, target_size, M, scale, num_kpts=num_kpts)
+        elif object_pose:
+            targets = apply_affine_to_object_pose(targets, (target_size[1],target_size[0]), M, scale, angle)
 
     return img, targets
 
-def _mirror(image, boxes, prob=0.5, human_kpts=None, flip_index=None):
+def _mirror(image, boxes, prob=0.5, human_pose=False, object_pose=False, human_kpts=None, flip_index=None):
     _, width, _ = image.shape
-    if random.random() < prob:
+    if random.random() < prob or object_pose:
         # flip image vertical (invert cols order)
         image = image[:, ::-1]
 
         # invert bbox cx and w w.r.t width
         boxes[:, 0::2] = width - boxes[:, 2::-2]
-        human_kpts[:, 0::2] = (width - human_kpts[:, 0::2])*(human_kpts[:, 0::2]!=0)
-
-        # semantically flip, i.e. left and right labelled need flipping
-        human_kpts[:, 0::2] = human_kpts[:, 0::2][:, flip_index]
-        human_kpts[:, 1::2] = human_kpts[:, 1::2][:, flip_index]
-
-    return image, boxes, human_kpts
+        if human_pose:
+            human_kpts[:, 0::2] = (width - human_kpts[:, 0::2])*(human_kpts[:, 0::2]!=0)
+            # semantically flip, i.e. left and right labelled need flipping
+            human_kpts[:, 0::2] = human_kpts[:, 0::2][:, flip_index]
+            human_kpts[:, 1::2] = human_kpts[:, 1::2][:, flip_index]
+    if human_pose:
+        return image, boxes, human_kpts
+    else:
+        return image, boxes
 
 
 def preproc(img, input_size, swap=(2, 0, 1)):
@@ -199,19 +234,30 @@ def preproc(img, input_size, swap=(2, 0, 1)):
 
 
 class TrainTransform:
-    def __init__(self, max_labels=50, flip_prob=0.5, hsv_prob=1.0, flip_index=None, num_kpts=5):
+    def __init__(self, max_labels=50, flip_prob=0.5, hsv_prob=1.0, object_pose = False, human_pose=False, flip_index=None, num_kpts=17):
         self.max_labels = max_labels
         self.flip_prob = flip_prob
         self.hsv_prob = hsv_prob
+        self.object_pose = object_pose
+        self.human_pose = human_pose
         self.flip_index = flip_index
         self.num_kpts = num_kpts
-        self.target_size = (5+2*self.num_kpts)  # 5+ 2*17
+        if self.object_pose:
+            self.target_size = 14  #5 + 9
+        elif self.human_pose:
+            self.target_size = (5+2*self.num_kpts)  # 5+ 2*17
+        else:
+            self.target_size = 5
 
     def __call__(self, image, targets, input_dim):
         boxes = targets[:, :4].copy()
         labels = targets[:, 4].copy()
-        human_kpts = targets[:, 5:].copy()
-
+        if self.object_pose:
+            object_poses = targets[:, 5:14].copy()
+        if self.human_pose:
+            human_kpts = targets[:, 5:].copy()
+        else:
+            human_kpts = None
         if len(boxes) == 0:
             targets = np.zeros((self.max_labels, self.target_size), dtype=np.float32)
             image, r_o = preproc(image, input_dim)
@@ -223,40 +269,60 @@ class TrainTransform:
         height_o, width_o, _ = image_o.shape
         boxes_o = targets_o[:, :4]
         labels_o = targets_o[:, 4]
-        human_kpts_o = targets_o[:, 5:]
+        if self.object_pose:
+            object_poses_o = targets_o[:, 5:14]
+        elif self.human_pose:
+            human_kpts_o = targets_o[:, 5:]
 
         # bbox_o: [xyxy] to [c_x,c_y,w,h]
         boxes_o = xyxy2cxcywh(boxes_o)
 
         if random.random() < self.hsv_prob:
             augment_hsv(image)
-
-        image_t, boxes, human_kpts = _mirror(image, boxes, self.flip_prob, human_kpts=human_kpts, flip_index=self.flip_index)
+        if self.human_pose:
+            image_t, boxes, human_kpts = _mirror(image, boxes, self.flip_prob, human_pose=self.human_pose, object_pose=self.object_pose, human_kpts=human_kpts, flip_index=self.flip_index)
+        elif self.object_pose:
+            image_t, boxes = image, boxes
+        else:
+            image_t, boxes = _mirror(image, boxes, self.flip_prob)
 
         height, width, _ = image_t.shape
         image_t, r_ = preproc(image_t, input_dim)
         # boxes [xyxy] 2 [cx,cy,w,h]
         boxes = xyxy2cxcywh(boxes)
         boxes *= r_
-        human_kpts *= r_
+        if self.human_pose:
+            human_kpts *= r_
+
 
         mask_b = np.minimum(boxes[:, 2], boxes[:, 3]) > 1
         boxes_t = boxes[mask_b]
         labels_t = labels[mask_b]
-        human_kpts_t = human_kpts[mask_b]
+        if self.object_pose:
+            object_poses_t = object_poses[mask_b]
+        elif self.human_pose:
+            human_kpts_t = human_kpts[mask_b]
 
         if len(boxes_t) == 0:
             image_t, r_o = preproc(image_o, input_dim)
             boxes_o *= r_o
             boxes_t = boxes_o
             labels_t = labels_o
-            human_kpts_t = human_kpts_o
-            human_kpts_t *= r_o
+            if self.object_pose:
+                object_poses_t = object_poses_o
+            elif self.human_pose:
+                human_kpts_t = human_kpts_o
+                human_kpts_t *= r_o
 
         labels_t = np.expand_dims(labels_t, 1)
 
         # ensure labels and targets are in correct dimensions for concatenation
-        targets_t = np.hstack((labels_t, boxes_t, human_kpts_t))
+        if self.object_pose:
+            targets_t = np.hstack((labels_t, boxes_t, object_poses_t))
+        elif self.human_pose:
+            targets_t = np.hstack((labels_t, boxes_t, human_kpts_t))
+        else:
+            targets_t = np.hstack((labels_t, boxes_t))
 
         # concat labels, boxes, kpts
         padded_labels = np.zeros((self.max_labels, self.target_size))

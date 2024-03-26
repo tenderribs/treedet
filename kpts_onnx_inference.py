@@ -12,7 +12,8 @@ import time
 import onnxruntime
 
 from yolox.data.data_augment import preproc as preprocess
-from yolox.utils import mkdir, multiclass_nms, demo_postprocess
+from yolox.data.datasets import COCO_CLASSES
+from yolox.utils import mkdir, multiclass_nms, demo_postprocess, vis
 
 
 def make_parser():
@@ -66,6 +67,7 @@ def make_parser():
 
 if __name__ == '__main__':
     args = make_parser().parse_args()
+
     input_shape = tuple(map(int, args.input_shape.split(',')))
 
     image_files = [f for f in os.listdir(args.images_path) if os.path.isfile(os.path.join(args.images_path, f))]
@@ -88,8 +90,6 @@ if __name__ == '__main__':
         # reg_output (bbox), obj_output, cls_output, kpts_output
         dets = output[0]
 
-        dets = dets[dets[:, 4] >= args.score_thr]
-
         # rescale bbox and kpts
         dets[:, :4] /= ratio
         dets[:, 6::3] /= ratio
@@ -97,17 +97,19 @@ if __name__ == '__main__':
 
         if dets is not None:
             final_boxes, final_scores, final_cls_inds = dets[:, :4], dets[:, 4], dets[:, 5]
+            origin_img = vis(origin_img, final_boxes, final_scores, final_cls_inds,
+                            conf=args.score_thr, class_names=("tree"))
 
             for det in dets:
-                # plot the bounding box
-                p1 = (int(det[0]), int(det[1]))
-                p2 = (int(det[2]), int(det[3]))
-                cv2.rectangle(origin_img, p1, p2, (52, 64, 235), 1)
+                if det[4] < args.score_thr: # only accept detections with confidence above the threshold
+                    continue
 
                 # plot the x and y keypoints with sufficient confidence score
                 for x, y, conf, label in zip(det[6::3], det[7::3], det[8::3], ["kpC", "kpL", "kpL", "ax1", "ax2"]):
-                    cv2.circle(origin_img, (int(x), int(y)), radius=2, color=(52, 64, 235), thickness=-1)
-                    cv2.putText(origin_img, label, (int(x), int(y) + 5 ), cv2.FONT_HERSHEY_SIMPLEX, 0.1, (255, 255, 255), 1)
+                    if (conf > args.score_thr):
+                        print(f"{label}\t\tx: {x}\ty:{y}\tkptconf:\t{conf}")
+
+                        cv2.circle(origin_img, (int(x), int(y)), radius=2, color=(255, 0, 0), thickness=-1)
 
         mkdir(args.output_dir)
         output_path = os.path.join(args.output_dir, image_file)
