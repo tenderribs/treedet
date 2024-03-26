@@ -22,7 +22,7 @@ class Exp(MyExp):
         self.num_kpts = 5
         self.default_sigmas = False # refers the the sigmas used in OKS formula
         self.input_size = (384, 672)    # (height, width)
-
+        self.act = "relu"
         # ---------------- dataloader config ---------------- #
         self.data_subdir = "SynthTree43k"
         self.train_ann = "trees_train.json"
