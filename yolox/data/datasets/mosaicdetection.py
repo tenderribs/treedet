@@ -11,8 +11,6 @@ from yolox.utils import adjust_box_anns, adjust_kpts_anns, get_local_rank
 
 from ..data_augment import random_affine
 from .datasets_wrapper import Dataset
-from .ycbv import YCBVDataset
-from .lmo import LMODataset
 
 
 def get_mosaic_coordinate(mosaic_image, mosaic_index, xc, yc, w, h, input_h, input_w):
