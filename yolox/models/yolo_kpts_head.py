@@ -14,6 +14,7 @@ from yolox.utils import bboxes_iou
 from .losses import IOUloss
 from .network_blocks import BaseConv, DWConv
 
+from torchvision.ops import nms
 
 class YOLOXHeadKPTS(nn.Module):
     def __init__(
@@ -317,8 +318,44 @@ class YOLOXHeadKPTS(nn.Module):
         #outputs[...,  6:] = (outputs[..., 6:] + kpt_grids.repeat(1,1,self.num_kpts)) * strides
         outputs[...,  6:] = (2*outputs[..., 6:] - 0.5  + kpt_grids.repeat(1,1,self.num_kpts)) * strides
 
+        # convert kpts conf to probabilities
         outputs[..., 8::3] = torch.sigmoid(outputs[..., 8::3])
-        return outputs
+
+        if outputs.size() != torch.Size([1, 5292, 21]):
+            print("multiple predictions, sth. is wrong")
+            return outputs
+
+        outputs = outputs[0] # convert (1, 5292, 21) -> (5292, 21)
+
+        # Get score and class with highest confidence
+        class_conf, class_pred = torch.max(outputs[:, 5: 5 + self.num_classes], 1, keepdim=True)
+
+        # conf = objectness * class_conf
+        conf =  outputs[:, 4:5] * class_conf
+
+        # Reassemble output in more sensible format
+        # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred, kpts)
+        tensor_cat_inp = [outputs[:, :4], conf, class_pred.float(), outputs[:, 6:]]
+        detections = torch.cat(tensor_cat_inp, 1)
+
+        # filter the low-confidence results
+        conf_mask = (conf.squeeze() >= 0.3).squeeze()
+        detections = detections[conf_mask]
+
+        # convert bbox format from cxcywh to xyxy
+        detections[:, 0] = detections[:, 0] - detections[:, 2] / 2  # top left x
+        detections[:, 1] = detections[:, 1] - detections[:, 3] / 2  # top left y
+        detections[:, 2] = detections[:, 0] + detections[:, 2]  # bottom right x
+        detections[:, 3] = detections[:, 1] + detections[:, 3]  # bottom right y
+
+        # perform NMS surpression on overlapping bboxes
+        nms_out_index = nms(
+            detections[:, :4],
+            detections[:, 4],
+            0.5,
+        )
+
+        return detections[nms_out_index]
 
     def get_losses(
         self,

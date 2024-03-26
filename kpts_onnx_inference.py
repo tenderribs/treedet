@@ -89,12 +89,11 @@ if __name__ == '__main__':
         # each row in dets contains the following in order:
         # reg_output (bbox), obj_output, cls_output, kpts_output
         dets = output[0]
-        dets[:, :4] /= ratio # rescale the bbox
-        dets[:, 6::3] /= ratio # rescale x of kpts
-        dets[:, 7::3] /= ratio # rescale y of kpts
 
-        # sig = lambda x : 1/(1 + np.exp(-x))
-        # dets[:, 8::3] = sig(dets[:, 8::3]) # convert logit to prob
+        # rescale bbox and kpts
+        dets[:, :4] /= ratio
+        dets[:, 6::3] /= ratio
+        dets[:, 7::3] /= ratio
 
         if dets is not None:
             final_boxes, final_scores, final_cls_inds = dets[:, :4], dets[:, 4], dets[:, 5]
@@ -102,13 +101,14 @@ if __name__ == '__main__':
                             conf=args.score_thr, class_names=("tree"))
 
             for det in dets:
-                if det[4] < args.score_thr: # only accept detections with objectness above the threshold
+                if det[4] < args.score_thr: # only accept detections with confidence above the threshold
                     continue
 
                 # plot the x and y keypoints with sufficient confidence score
                 for x, y, conf, label in zip(det[6::3], det[7::3], det[8::3], ["kpC", "kpL", "kpL", "ax1", "ax2"]):
                     if (conf > args.score_thr):
                         print(f"{label}\t\tx: {x}\ty:{y}\tkptconf:\t{conf}")
+
                         cv2.circle(origin_img, (int(x), int(y)), radius=2, color=(255, 0, 0), thickness=-1)
 
         mkdir(args.output_dir)
