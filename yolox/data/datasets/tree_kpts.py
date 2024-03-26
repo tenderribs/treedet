@@ -26,7 +26,6 @@ class TREEKPTSDataset(Dataset):
         img_size=(720, 1280),
         preproc=None,
         cache=False,
-        human_pose=True,
         num_kpts=5,
         default_flip_index=True
     ):
@@ -56,7 +55,6 @@ class TREEKPTSDataset(Dataset):
         self.name = name
         self.img_size = img_size
         self.preproc = preproc
-        self.human_pose = human_pose
         self.annotations, self.ids = self._load_coco_annotations()
 
         # when you horizontally flip the image, the keypoint labels need to be modified
@@ -143,24 +141,20 @@ class TREEKPTSDataset(Dataset):
         num_objs = len(objs)
         if num_objs==0:
             return
-        if self.human_pose: # here human pose just same as for trees
-            res = np.zeros((num_objs, 5+2*self.num_kpts))
-        else:
-            res = np.zeros((num_objs, 5))
+
+        res = np.zeros((num_objs, 5+2*self.num_kpts))
 
         for ix, obj in enumerate(objs):
             cls = self.class_ids.index(obj["category_id"])
             res[ix, 0:4] = obj["clean_bbox"] # put bbox data in res
             res[ix, 4] = cls                 # put the class ID in res
-            if self.human_pose:
-                res[ix, 5::2] = obj["clean_kpts"][0::3]
-                res[ix, 6::2] = obj["clean_kpts"][1::3]
+            res[ix, 5::2] = obj["clean_kpts"][0::3]
+            res[ix, 6::2] = obj["clean_kpts"][1::3]
 
         # r should be 1 since all images are 1280 x 720
         r = min(self.img_size[0] / height, self.img_size[1] / width)
         res[:, :4] *= r
-        if self.human_pose:
-            res[:, 5:] *= r
+        res[:, 5:] *= r
 
         img_info = (height, width)
         resized_info = (int(height * r), int(width * r))
