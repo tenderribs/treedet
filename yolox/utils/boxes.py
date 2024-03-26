@@ -140,34 +140,24 @@ def postprocess_export(prediction, num_classes, conf_thre=0.7, nms_thre=0.45, ta
     prediction[:, :, :4] = box
 
     output = [None for _ in range(len(prediction))]
+
     for i, image_pred in enumerate(prediction):
 
         # If none are remaining => process next image
         if not image_pred.size(0):
             continue
+
         # Get score and class with highest confidence
         class_conf, class_pred = torch.max(image_pred[:, 5: 5 + num_classes], 1, keepdim=True)
         conf =  image_pred[:, 4:5] * class_conf
         conf_mask = (conf.squeeze() >= conf_thre).squeeze()
+
         # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred)
         tensor_cat_inp = [image_pred[:, :4], conf, class_pred.float()]
-        if task == "human_pose":
-            tensor_cat_inp.extend([image_pred[:,6:]])
+        tensor_cat_inp.extend([image_pred[:,6:]])
         detections = torch.cat(tensor_cat_inp, 1)
-
         detections = detections[conf_mask]
-        # manu: commenting out to avoid onnx export error.
-        # if not detections.size(0):
-        #     continue
-        class_2d_offset = detections[:, -1:] * 4096  # class_2d_offser
 
-        nms_out_index = torchvision.ops.nms(
-            detections[:, :4] + class_2d_offset,
-            detections[:, 4],
-            nms_thre,
-        )
-
-        detections = detections[nms_out_index]
         if output[i] is None:
             output[i] = detections
         else:

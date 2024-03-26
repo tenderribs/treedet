@@ -4,15 +4,12 @@ python3 -m yolox.tools.train -n yolox_s_tree_pose --task human_pose --dataset tr
 
 # export onnx
 python3 tools/export_onnx.py \
-    --output-name pretrained_models/yolox_s_tree_pose.onnx \
+    --output-name pretrained_models/yolox_s_cana100_tree_pose_inline_decode.onnx \
     -f exps/default/yolox_s_tree_pose.py \
-    --task human_pose \
-    --export-det \
-    -c YOLOX_outputs/yolox_s_tree_pose/best_ckpt.pth
-
+    -c pretrained_models/2024-03-19_cana100_best.pth
 # run inference
 python3 kpts_onnx_inference.py \
-    --model pretrained_models/yolox_s_cana100_tree_pose.onnx \
+    --model pretrained_models/yolox_s_cana100_tree_pose_inline_decode.onnx \
     --output_dir YOLOX_outputs/inference \
     --images_path ./datasets/mark_forest \
     --score_thr 0.8
