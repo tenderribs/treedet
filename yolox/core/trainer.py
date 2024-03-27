@@ -229,10 +229,9 @@ class Trainer:
                 self.save_ckpt(ckpt_name="last_mosaic_epoch")
 
     def after_epoch(self):
-        date_time = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        self.save_ckpt(ckpt_name=f"{self.exp.exp_name}_{date_time}")
-
         if (self.epoch + 1) % self.exp.eval_interval == 0:
+            # date_time = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            # self.save_ckpt(ckpt_name=f"{self.exp.exp_name}_{date_time}")
             all_reduce_norm(self.model)
             self.evaluate_and_save_model()
 
