@@ -1,5 +1,4 @@
 numpy
-opencv-python
 loguru
 scikit-image
 tqdm
