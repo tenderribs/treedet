@@ -180,19 +180,14 @@ class Exp(MyExp):
         return val_loader
 
     def get_evaluator(self, batch_size, is_distributed, testdev=False, legacy=False):
-        from yolox.evaluators import COCOHumanPoseEvaluator
+        from yolox.evaluators import TreeKptsEvaluator
 
         val_loader = self.get_eval_loader(batch_size, is_distributed, testdev, legacy)
         output_dir = os.path.join(self.output_dir, self.exp_name)
-        evaluator = COCOHumanPoseEvaluator(
+        evaluator = TreeKptsEvaluator(
             dataloader=val_loader,
             img_size=self.test_size,
-            confthre=self.test_conf,
-            nmsthre=self.nmsthre,
             num_classes=self.num_classes,
-            testdev=testdev,
-            visualize=self.visualize,
-            output_dir=output_dir,
             num_kpts=self.num_kpts,
             default_sigmas=self.default_sigmas,
             device_type=self.device_type

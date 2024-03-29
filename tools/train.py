@@ -128,6 +128,16 @@ def main(exp, args):
     configure_omp()
     cudnn.benchmark = True
 
+
+
+    trainer = Trainer(exp, args)
+    trainer.train()
+
+
+if __name__ == "__main__":
+    args = make_parser().parse_args()
+    exp = get_exp(args.exp_file, args.name)
+
     if args.dataset is not None:
         assert (
             args.dataset in SUPPORTED_DATASETS
@@ -141,19 +151,11 @@ def main(exp, args):
         exp.test_ann = ds['test_ann']
         exp.val_ann = ds['val_ann']
 
-        # set model size
-        exp.depth, exp.width = model_sizes[args.model_size]
-        exp.exp_name = f"yolox_{args.model_size}_tree_pose"
-
     if args.max_epoch: exp.max_epoch = args.max_epoch
 
-    trainer = Trainer(exp, args)
-    trainer.train()
-
-
-if __name__ == "__main__":
-    args = make_parser().parse_args()
-    exp = get_exp(args.exp_file, args.name)
+    # set model size
+    exp.depth, exp.width = model_sizes[args.model_size]
+    exp.exp_name = f"yolox_{args.model_size}_tree_pose"
 
     if not args.experiment_name:
         args.experiment_name = exp.exp_name

@@ -26,7 +26,7 @@ from yolox.utils import (
 )
 
 
-class KptsEvaluator:
+class TreeKptsEvaluator:
     """
     COCO AP Evaluation class.  All the data in the val2017 dataset are processed
     and evaluated by COCO API.

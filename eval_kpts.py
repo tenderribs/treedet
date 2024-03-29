@@ -3,11 +3,10 @@ import argparse
 import os
 
 from yolox.data import TREEKPTSDataset, ValTransform
-from yolox.evaluators import KptsEvaluator
+from yolox.evaluators import TreeKptsEvaluator
 from yolox.exp import get_exp
 
-from data_config import SUPPORTED_DATASETS, synth43k, cana100
-
+from config import SUPPORTED_DATASETS, model_sizes, synth43k, cana100
 
 def make_parser():
     parser = argparse.ArgumentParser("Evaluate kpts")
@@ -16,6 +15,14 @@ def make_parser():
     parser.add_argument("-f", "--exp_file", type=str, default="synth43k", required=True)
     parser.add_argument("-c", "--ckpt", type=str, default="synth43k", required=True)
     parser.add_argument("--testset", action="store_true", required=True)
+    parser.add_argument(
+        "-ms",
+        "--model-size",
+        choices=['s', 'm', 'l'],
+        required=True,
+        type=str,
+        help="Model Size (s, m, l)"
+    )
     return parser
 
 def get_val_loader(exp, dataset, testset):
@@ -41,12 +48,13 @@ def get_val_loader(exp, dataset, testset):
 if __name__ == '__main__':
     args = make_parser().parse_args()
     exp = get_exp(args.exp_file, args.name)
+    exp.depth, exp.width = model_sizes[args.model_size]
 
     ds =  cana100 if args.dataset == "cana100" else synth43k
 
     val_loader = get_val_loader(exp, ds, args.testset)
 
-    evaluator = KptsEvaluator(
+    evaluator = TreeKptsEvaluator(
         dataloader=val_loader,
         img_size=exp.test_size,
         num_classes=exp.num_classes,

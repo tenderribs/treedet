@@ -14,6 +14,8 @@ from yolox.models.network_blocks import SiLU
 from yolox.utils import replace_module
 from yolox.data.data_augment import preproc as preprocess
 
+from config import model_sizes
+
 import cv2
 
 _SUPPORTED_DATASETS = ["tree_kpts"]
@@ -39,6 +41,14 @@ def make_parser():
     )
     parser.add_argument("--no-onnxsim", action="store_true", help="use onnxsim or not")
     parser.add_argument(
+        "-ms",
+        "--model-size",
+        choices=['s', 'm', 'l'],
+        required=True,
+        type=str,
+        help="Model Size (s, m, l)"
+    )
+    parser.add_argument(
         "-f",
         "--exp_file",
         default=None,
@@ -58,6 +68,9 @@ def main(exp=None):
     args = make_parser().parse_args()
     logger.info("args value: {}".format(args))
     exp = get_exp(args.exp_file, args.name)
+
+    exp.depth, exp.width = model_sizes[args.model_size]
+    exp.exp_name = f"yolox_{args.model_size}_tree_pose"
 
     if not args.experiment_name:
         args.experiment_name = exp.exp_name

@@ -2,4 +2,4 @@
 # -*- coding:utf-8 -*-
 # Copyright (c) Megvii, Inc. and its affiliates.
 
-from .kpts_evaluator import KptsEvaluator
+from .kpts_evaluator import TreeKptsEvaluator
