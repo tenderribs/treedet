@@ -72,4 +72,4 @@ if __name__ == '__main__':
         test_size=exp.test_size
     )
 
-    print(f"ap50_95: {ap50_95}, ap50_95: {ap50}")
+    print(f"ap50_95: {ap50_95}, ap50: {ap50}\n\n{summary}")

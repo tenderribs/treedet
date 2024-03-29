@@ -18,3 +18,10 @@ python3 kpts_onnx_inference.py \
     --output_dir YOLOX_outputs/inference \
     --images_path ./datasets/mark_forest \
     --score_thr 0.8
+
+# run evaluation
+python3 eval_kpts.py \
+    -f exps/default/yolox_s_tree_pose.py \
+    -c pretrained_models/2024-03-19_cana100_best.pth \
+    --testset \
+    --dataset synth43k
