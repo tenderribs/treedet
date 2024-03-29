@@ -13,3 +13,9 @@ cana100 = {
     "test_ann": "trees_val.json", # use val for testing cuz only 500 images
     "val_ann": "trees_val.json",
 }
+
+model_sizes = { # depth, width
+    "s": (0.33, 0.5),
+    "m": (0.67, 0.75),
+    "l": (1, 1),
+}

@@ -16,7 +16,7 @@ from yolox.core import Trainer, launch
 from yolox.exp import get_exp
 from yolox.utils import configure_nccl, configure_omp, get_num_devices
 
-from data_config import SUPPORTED_DATASETS, synth43k, cana100
+from config import SUPPORTED_DATASETS, model_sizes, synth43k, cana100
 
 def make_parser():
     parser = argparse.ArgumentParser("YOLOX train parser")
@@ -58,6 +58,14 @@ def make_parser():
         default=None,
         type=str,
         help="weights for trained 2DOD network"
+    )
+    parser.add_argument(
+        "-ms",
+        "--model-size",
+        choices=['s', 'm', 'l'],
+        required=True,
+        type=str,
+        help="Model Size (s, m, l)"
     )
     parser.add_argument(
         "--max-epoch",
@@ -132,6 +140,10 @@ def main(exp, args):
         exp.train_ann = ds['train_ann']
         exp.test_ann = ds['test_ann']
         exp.val_ann = ds['val_ann']
+
+        # set model size
+        exp.depth, exp.width = model_sizes[args.model_size]
+        exp.exp_name = f"yolox_{args.model_size}_tree_pose"
 
     if args.max_epoch: exp.max_epoch = args.max_epoch
 
