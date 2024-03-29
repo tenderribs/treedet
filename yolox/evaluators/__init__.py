@@ -2,4 +2,4 @@
 # -*- coding:utf-8 -*-
 # Copyright (c) Megvii, Inc. and its affiliates.
 
-from .coco_human_pose_evaluator import COCOHumanPoseEvaluator
+from .kpts_evaluator import KptsEvaluator

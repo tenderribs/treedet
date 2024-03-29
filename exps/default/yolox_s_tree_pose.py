@@ -158,7 +158,7 @@ class Exp(MyExp):
             json_file=self.val_ann if not testdev else self.test_ann,
             num_kpts=self.num_kpts,
             img_size=self.test_size,
-            preproc=ValTransform(legacy=legacy),
+            preproc=ValTransform(),
         )
 
         if is_distributed:
