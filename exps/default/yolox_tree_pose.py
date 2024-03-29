@@ -15,8 +15,8 @@ class Exp(MyExp):
         self.device_type = 'cuda'
 
         # ---------------- model config ---------------- #
-        self.depth = 0.33
-        self.width = 0.50
+        self.depth = 1
+        self.width = 1
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
         self.num_classes = 1 # just trees
         self.num_kpts = 5

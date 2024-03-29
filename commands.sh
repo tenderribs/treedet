@@ -18,6 +18,18 @@ python3 kpts_onnx_inference.py \
     --model pretrained_models/yolox_s_cana100_tree_pose_inline_decode.onnx \
     --output_dir YOLOX_outputs/inference_s \
     --images_path ./datasets/mark_forest \
+    --score_thr 0.8
+
+# create trt engine
+trtexec \
+        --onnx=pretrained_models/yolox_s_cana100_tree_pose_inline_decode.onnx \
+        --saveEngine=pretrained_models/yolox_s_cana100_tree_pose_inline_decode.engine
+
+python3 kpts_trt_inference.py \
+    --model pretrained_models/yolox_s_cana100_tree_pose_inline_decode.engine \
+    --output_dir YOLOX_outputs/trtout \
+    --images_path ./datasets/mark_forest \
+    --score_thr 0.8
     --score_thr 0.5
 
 # run evaluation
