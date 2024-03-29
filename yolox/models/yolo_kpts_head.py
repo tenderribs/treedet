@@ -325,41 +325,36 @@ class YOLOXHeadKPTS(nn.Module):
         # convert kpts conf to probabilities
         outputs[..., 8::3] = torch.sigmoid(outputs[..., 8::3])
 
-        if outputs.size() != torch.Size([1, 5292, 21]):
-            print("multiple predictions, sth. is wrong")
-            return outputs
+        results = []
+        for i in range(outputs.shape[0]):
+            output = outputs[i] # for each image in batch
 
-        outputs = outputs[0] # convert (1, 5292, 21) -> (5292, 21)
+            # Get score and class with highest confidence
+            class_conf, class_pred = torch.max(output[:, 5: 5 + self.num_classes], 1, keepdim=True)
 
-        # Get score and class with highest confidence
-        class_conf, class_pred = torch.max(outputs[:, 5: 5 + self.num_classes], 1, keepdim=True)
+            # conf = objectness * class_conf
+            conf =  output[:, 4:5] * class_conf
 
-        # conf = objectness * class_conf
-        conf =  outputs[:, 4:5] * class_conf
+            # Reassemble output in more sensible format
+            # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred, kpts)
+            tensor_cat_inp = [output[:, :4], conf, class_pred.float(), output[:, 6:]]
+            detections = torch.cat(tensor_cat_inp, 1)
 
-        # Reassemble output in more sensible format
-        # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred, kpts)
-        tensor_cat_inp = [outputs[:, :4], conf, class_pred.float(), outputs[:, 6:]]
-        detections = torch.cat(tensor_cat_inp, 1)
+            # filter the low-confidence results
+            conf_mask = (conf.squeeze() >= 0.3).squeeze()
+            detections = detections[conf_mask]
 
-        # filter the low-confidence results
-        conf_mask = (conf.squeeze() >= 0.3).squeeze()
-        detections = detections[conf_mask]
+            # convert bbox format from cxcywh to xyxy
+            detections[:, 0] = detections[:, 0] - detections[:, 2] / 2  # top left x
+            detections[:, 1] = detections[:, 1] - detections[:, 3] / 2  # top left y
+            detections[:, 2] = detections[:, 0] + detections[:, 2]  # bottom right x
+            detections[:, 3] = detections[:, 1] + detections[:, 3]  # bottom right y
 
-        # convert bbox format from cxcywh to xyxy
-        detections[:, 0] = detections[:, 0] - detections[:, 2] / 2  # top left x
-        detections[:, 1] = detections[:, 1] - detections[:, 3] / 2  # top left y
-        detections[:, 2] = detections[:, 0] + detections[:, 2]  # bottom right x
-        detections[:, 3] = detections[:, 1] + detections[:, 3]  # bottom right y
+            # perform NMS surpression on overlapping bboxes
+            nms_out_index = nms(detections[:, :4], detections[:, 4], 0.5)
 
-        # perform NMS surpression on overlapping bboxes
-        nms_out_index = nms(
-            detections[:, :4],
-            detections[:, 4],
-            0.5,
-        )
-
-        return detections[nms_out_index]
+            results.append(detections[nms_out_index])
+        return results
 
     def get_losses(
         self,

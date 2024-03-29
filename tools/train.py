@@ -16,21 +16,7 @@ from yolox.core import Trainer, launch
 from yolox.exp import get_exp
 from yolox.utils import configure_nccl, configure_omp, get_num_devices
 
-_SUPPORTED_DATASETS = ["synth43k", "cana100"]
-
-synth43k = {
-    "data_subdir": "SynthTree43k",
-    "train_ann": "trees_train.json",
-    "test_ann": "trees_test.json",
-    "val_ann": "trees_val.json",
-}
-
-cana100 = {
-    "data_subdir": "CanaTree100",
-    "train_ann": "trees_train.json",
-    "test_ann": "trees_val.json", # use val for testing cuz only 500 images
-    "val_ann": "trees_val.json",
-}
+from config import SUPPORTED_DATASETS, model_sizes, synth43k, cana100
 
 def make_parser():
     parser = argparse.ArgumentParser("YOLOX train parser")
@@ -72,6 +58,14 @@ def make_parser():
         default=None,
         type=str,
         help="weights for trained 2DOD network"
+    )
+    parser.add_argument(
+        "-ms",
+        "--model-size",
+        choices=['s', 'm', 'l'],
+        required=True,
+        type=str,
+        help="Model Size (s, m, l)"
     )
     parser.add_argument(
         "--max-epoch",
@@ -134,9 +128,19 @@ def main(exp, args):
     configure_omp()
     cudnn.benchmark = True
 
+
+
+    trainer = Trainer(exp, args)
+    trainer.train()
+
+
+if __name__ == "__main__":
+    args = make_parser().parse_args()
+    exp = get_exp(args.exp_file, args.name)
+
     if args.dataset is not None:
         assert (
-            args.dataset in _SUPPORTED_DATASETS
+            args.dataset in SUPPORTED_DATASETS
         ), "The given dataset is not supported for training!"
 
         exp.data_set = args.dataset
@@ -149,13 +153,9 @@ def main(exp, args):
 
     if args.max_epoch: exp.max_epoch = args.max_epoch
 
-    trainer = Trainer(exp, args)
-    trainer.train()
-
-
-if __name__ == "__main__":
-    args = make_parser().parse_args()
-    exp = get_exp(args.exp_file, args.name)
+    # set model size
+    exp.depth, exp.width = model_sizes[args.model_size]
+    exp.exp_name = f"yolox_{args.model_size}_tree_pose"
 
     if not args.experiment_name:
         args.experiment_name = exp.exp_name
