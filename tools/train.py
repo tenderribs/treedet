@@ -16,21 +16,7 @@ from yolox.core import Trainer, launch
 from yolox.exp import get_exp
 from yolox.utils import configure_nccl, configure_omp, get_num_devices
 
-_SUPPORTED_DATASETS = ["synth43k", "cana100"]
-
-synth43k = {
-    "data_subdir": "SynthTree43k",
-    "train_ann": "trees_train.json",
-    "test_ann": "trees_test.json",
-    "val_ann": "trees_val.json",
-}
-
-cana100 = {
-    "data_subdir": "CanaTree100",
-    "train_ann": "trees_train.json",
-    "test_ann": "trees_val.json", # use val for testing cuz only 500 images
-    "val_ann": "trees_val.json",
-}
+from data_config import SUPPORTED_DATASETS, synth43k, cana100
 
 def make_parser():
     parser = argparse.ArgumentParser("YOLOX train parser")
@@ -136,7 +122,7 @@ def main(exp, args):
 
     if args.dataset is not None:
         assert (
-            args.dataset in _SUPPORTED_DATASETS
+            args.dataset in SUPPORTED_DATASETS
         ), "The given dataset is not supported for training!"
 
         exp.data_set = args.dataset
