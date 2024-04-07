@@ -16,7 +16,7 @@ from yolox.core import Trainer, launch
 from yolox.exp import get_exp
 from yolox.utils import configure_nccl, configure_omp, get_num_devices
 
-from config import SUPPORTED_DATASETS, model_sizes, synth43k, cana100
+from config import model_sizes, datasets
 
 def make_parser():
     parser = argparse.ArgumentParser("YOLOX train parser")
@@ -50,7 +50,7 @@ def make_parser():
     parser.add_argument(
         "--resume", default=False, action="store_true", help="resume training"
     )
-    parser.add_argument("--dataset", default=None, type=str, help="dataset for training")
+    parser.add_argument("--dataset", default=None, type=str, help="dataset for training", choices=list(datasets.keys()), required=True)
     parser.add_argument("-c", "--ckpt", default=None, type=str, help="checkpoint file")
     parser.add_argument(
         "-odw",
@@ -128,8 +128,6 @@ def main(exp, args):
     configure_omp()
     cudnn.benchmark = True
 
-
-
     trainer = Trainer(exp, args)
     trainer.train()
 
@@ -138,18 +136,13 @@ if __name__ == "__main__":
     args = make_parser().parse_args()
     exp = get_exp(args.exp_file, args.name)
 
-    if args.dataset is not None:
-        assert (
-            args.dataset in SUPPORTED_DATASETS
-        ), "The given dataset is not supported for training!"
+    exp.data_set = args.dataset
+    ds = datasets[args.dataset]
 
-        exp.data_set = args.dataset
-        ds = synth43k if args.dataset == "synth43k" else cana100
-
-        exp.data_subdir = ds['data_subdir']
-        exp.train_ann = ds['train_ann']
-        exp.test_ann = ds['test_ann']
-        exp.val_ann = ds['val_ann']
+    exp.data_subdir = ds['data_subdir']
+    exp.train_ann = ds['train_ann']
+    exp.test_ann = ds['test_ann']
+    exp.val_ann = ds['val_ann']
 
     if args.max_epoch: exp.max_epoch = args.max_epoch
 
