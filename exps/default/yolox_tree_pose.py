@@ -28,6 +28,8 @@ class Exp(MyExp):
         self.train_ann = "trees_train.json"
         self.test_ann = "trees_test.json"
         self.val_ann = "trees_val.json"
+        self.mean_bgr = None # gets injected by train.py at runtime
+        self.std_bgr = None  # dito
         # --------------- transform config ----------------- #
         # self.mosaic_prob = 0.0
         # self.mixup_prob = 0.0
@@ -93,6 +95,8 @@ class Exp(MyExp):
             dataset = TREEKPTSDataset(
                 data_dir=self.data_subdir,
                 json_file=self.train_ann,
+                mean_bgr=self.mean_bgr,
+                std_bgr=self.std_bgr,
                 num_kpts=self.num_kpts,
                 preproc=TrainTransform(
                     max_labels=50,
@@ -156,6 +160,8 @@ class Exp(MyExp):
         valdataset = TREEKPTSDataset(
             data_dir=self.data_subdir,
             json_file=self.val_ann if not testdev else self.test_ann,
+            mean_bgr=self.mean_bgr,
+            std_bgr=self.std_bgr,
             num_kpts=self.num_kpts,
             img_size=self.test_size,
             preproc=ValTransform(),

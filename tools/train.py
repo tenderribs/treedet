@@ -144,6 +144,9 @@ if __name__ == "__main__":
     exp.test_ann = ds['test_ann']
     exp.val_ann = ds['val_ann']
 
+    exp.mean_bgr = ds['mean_bgr']
+    exp.std_bgr = ds['std_bgr']
+
     if args.max_epoch: exp.max_epoch = args.max_epoch
 
     # set model size

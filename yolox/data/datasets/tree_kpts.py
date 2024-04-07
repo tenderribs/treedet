@@ -24,6 +24,8 @@ class TREEKPTSDataset(Dataset):
         json_file="trees_train.json",
         name="SynthTree43k",
         img_size=(720, 1280),
+        mean_bgr=None,
+        std_bgr=None,
         preproc=None,
         cache=False,
         num_kpts=5,
@@ -54,6 +56,8 @@ class TREEKPTSDataset(Dataset):
         self.imgs = None
         self.name = name
         self.img_size = img_size
+        self.mean_bgr = mean_bgr
+        self.std_bgr = std_bgr
         self.preproc = preproc
         self.annotations, self.ids = self._load_coco_annotations()
 
@@ -193,6 +197,11 @@ class TREEKPTSDataset(Dataset):
 
         img = cv2.imread(img_file)
         assert img is not None
+
+        # normalize image w.r.t entire dataset
+        if (self.std_bgr is not None and self.mean_bgr is not None):
+            img = img.astype(np.float32)
+            return (img - self.mean_bgr) / self.std_bgr
 
         return img
 
