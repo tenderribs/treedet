@@ -13,6 +13,25 @@ To train the network, you need the synthetic and real datasets.
 
 Annotations for Synth43k and CanaTree100 are provided in the folders on S3 and Onedrive respectively. Wikitrees has annotations on Google Drive and also has annotations of both real datasets merged together. Note that you should still symlink the image files of CanaTree100 into the WikiTree100 for the full CanaWikiTree200 dataset.
 
+Here is the expected file system format for the datasets folder, starting from root:
+
+```
+.
+└── datasets
+    ├── SynthTree43k
+    │   ├── annotations
+    │   │   ├── trees_train.json
+    │   │   ├── trees_test.json
+    │   │   └── trees_val.json
+    │   └── *.png
+    └── CanaWikiTree200
+        ├── annotations
+        │   ├── trees_train.json
+        │   ├── trees_test.json
+        │   └── trees_val.json
+        └── *.png
+```
+
 ### Scripts
 
 This project has a fully configured VSCode Devcontainer to facilitate easy setup. If you so wish, the Docker container is in the `.devcontainer` folder for direct usage. It needs the following command to be run manually:
