@@ -9,9 +9,9 @@ To train the network, you need the synthetic and real datasets.
 | ----------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Synth43k    | 43k computer generated images of trees | [Github](https://github.com/norlab-ulaval/PercepTreeV1)                                              |
 | CanaTree100 | 100 real images from Canadian forests  | [Github](https://github.com/norlab-ulaval/PercepTreeV1)                                              |
-| WikiTrees   | 100 real images from forests worldwide | [Google Drive](https://drive.google.com/drive/folders/1CBwYHaWVl0_Li1czkcmdCc6V6Mw0ee8D?usp=sharing) |
+| WikiTree    | 100 real images from forests worldwide | [Google Drive](https://drive.google.com/drive/folders/1CBwYHaWVl0_Li1czkcmdCc6V6Mw0ee8D?usp=sharing) |
 
-Annotations for Synth43k and CanaTree100 are provided in the folders on S3 and Onedrive respectively. Wikitrees has annotations on Google Drive and also has annotations of both real datasets merged together.
+Annotations for Synth43k and CanaTree100 are provided in the folders on S3 and Onedrive respectively. Wikitrees has annotations on Google Drive and also has annotations of both real datasets merged together. Note that you should still symlink the image files of CanaTree100 into the WikiTree100 for the full CanaWikiTree200 dataset.
 
 ### Scripts
 
