@@ -37,6 +37,8 @@ def calculate_normalization_coefficients(ds_conf):
     dataset = NormalizationDataset(
                 data_dir=ds_conf['data_subdir'],
                 json_file=ds_conf['train_ann'],
+                mean_bgr=None, # explicitly None for clarity, as we are trying to find these out :)
+                std_bgr=None
             )
 
     # Randomly sample from the dataset if it has more than SAMPLE_SIZE images
