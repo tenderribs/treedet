@@ -102,8 +102,8 @@ class Trainer:
 
         # perform normalization w.r.t dataset after all augmentation steps:
         # first reshape to fit  is in format B,C,W,H
-        mean_bgr = torch.tensor(self.exp.mean_bgr).view(1, 3, 1, 1).to(self.data_type)
-        std_bgr = torch.tensor(self.exp.std_bgr).view(1, 3, 1, 1).to(self.data_type)
+        mean_bgr = torch.tensor(self.exp.mean_bgr, dtype=self.data_type, device=self.device).view(1, 3, 1, 1)
+        std_bgr = torch.tensor(self.exp.std_bgr, dtype=self.data_type, device=self.device).view(1, 3, 1, 1)
 
         # then normalize
         inps = (inps - mean_bgr) / std_bgr
