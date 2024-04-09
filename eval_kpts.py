@@ -51,6 +51,8 @@ if __name__ == '__main__':
     exp.depth, exp.width = model_sizes[args.model_size]
 
     ds = datasets[args.dataset]
+    exp.mean_bgr = ds['mean_bgr']
+    exp.std_bgr = ds['std_bgr']
 
     val_loader = get_val_loader(exp, ds, args.testset)
 

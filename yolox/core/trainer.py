@@ -100,14 +100,6 @@ class Trainer:
         targets.requires_grad = False
         inps, targets = self.exp.preprocess(inps, targets, self.input_size)
 
-        # perform normalization w.r.t dataset after all augmentation steps:
-        # first reshape to fit  is in format B,C,W,H
-        mean_bgr = torch.tensor(self.exp.mean_bgr, dtype=self.data_type, device=self.device).view(1, 3, 1, 1)
-        std_bgr = torch.tensor(self.exp.std_bgr, dtype=self.data_type, device=self.device).view(1, 3, 1, 1)
-
-        # then normalize
-        inps = (inps - mean_bgr) / std_bgr
-
         data_end_time = time.time()
 
         if self.exp.device_type == "cpu":
