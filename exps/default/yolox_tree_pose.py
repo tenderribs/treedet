@@ -31,7 +31,7 @@ class Exp(MyExp):
         self.mean_bgr = None # gets injected by train.py at runtime
         self.std_bgr = None  # dito
         # --------------- transform config ----------------- #
-        # self.mosaic_prob = 0.0
+        self.mosaic_prob = 0.0
         # self.mixup_prob = 0.0
         # self.hsv_prob = 1.0
         # self.flip_prob = 0.0
@@ -41,7 +41,7 @@ class Exp(MyExp):
         # self.mixup_scale = (1.0, 1.0)
         # self.shear = 0.0
         # self.perspective = 0.0
-        # self.enable_mixup = False
+        self.enable_mixup = False
         # self.shape_loss = False
         # --------------  training config --------------------- #
         self.max_epoch = 100
@@ -95,8 +95,6 @@ class Exp(MyExp):
             dataset = TREEKPTSDataset(
                 data_dir=self.data_subdir,
                 json_file=self.train_ann,
-                mean_bgr=self.mean_bgr,
-                std_bgr=self.std_bgr,
                 num_kpts=self.num_kpts,
                 preproc=TrainTransform(
                     max_labels=50,
@@ -160,8 +158,6 @@ class Exp(MyExp):
         valdataset = TREEKPTSDataset(
             data_dir=self.data_subdir,
             json_file=self.val_ann if not testdev else self.test_ann,
-            mean_bgr=self.mean_bgr,
-            std_bgr=self.std_bgr,
             num_kpts=self.num_kpts,
             img_size=self.test_size,
             preproc=ValTransform(),

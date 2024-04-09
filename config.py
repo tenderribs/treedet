@@ -12,8 +12,8 @@ datasets = {
         "train_ann": "CanaWikiTree200_train.json",
         "test_ann": "CanaWikiTree200_val.json", # use val for testing since only 200 images
         "val_ann": "CanaWikiTree200_val.json",
-        "mean_bgr": [83.0013, 93.8874, 96.4963],
-        "std_bgr": [55.7843, 56.4000, 56.7816]
+        "mean_bgr": [83.3623, 94.0783, 96.6455],
+        "std_bgr": [53.8556, 54.2480, 54.6537]
     }
 }
 
