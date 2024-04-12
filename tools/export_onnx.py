@@ -72,6 +72,7 @@ def main(exp=None):
 
     exp.depth, exp.width = model_sizes[args.model_size]
     exp.exp_name = f"yolox_{args.model_size}_tree_pose"
+    ds = datasets[args.dataset]
     exp.mean_bgr = ds['mean_bgr']
     exp.std_bgr = ds['std_bgr']
 

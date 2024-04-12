@@ -102,7 +102,7 @@ if __name__ == '__main__':
                 # plot the bounding box
                 p1 = (int(det[0]), int(det[1]))
                 p2 = (int(det[2]), int(det[3]))
-                cv2.rectangle(origin_img, p1, p2, (52, 64, 235), 1)
+                cv2.rectangle(origin_img, p1, p2, (255, 251, 43), 1)
 
                 # plot the x and y keypoints with sufficient confidence score
                 for x, y, conf, label in zip(det[6::3], det[7::3], det[8::3], ["kpC", "kpL", "kpL", "ax1", "ax2"]):
