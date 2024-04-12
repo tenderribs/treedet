@@ -99,6 +99,7 @@ class Trainer:
         targets = targets.to(self.data_type)
         targets.requires_grad = False
         inps, targets = self.exp.preprocess(inps, targets, self.input_size)
+
         data_end_time = time.time()
 
         if self.exp.device_type == "cpu":

@@ -4,16 +4,16 @@ datasets = {
         "train_ann": "trees_train.json",
         "test_ann": "trees_test.json",
         "val_ann": "trees_val.json",
-        "mean_bgr": [64.3229, 81.2194, 89.7864],
-        "std_bgr": [57.0427, 58.6869, 63.5141]
+        "mean_bgr": [64.2190, 80.8418, 89.3639],
+        "std_bgr": [55.3860, 56.5531, 60.9160]
     },
     "canawiki200": {
         "data_subdir": "CanaWikiTree200",
         "train_ann": "CanaWikiTree200_train.json",
         "test_ann": "CanaWikiTree200_val.json", # use val for testing since only 200 images
         "val_ann": "CanaWikiTree200_val.json",
-        "mean_bgr": [83.0013, 93.8874, 96.4963],
-        "std_bgr": [55.7843, 56.4000, 56.7816]
+        "mean_bgr": [83.3623, 94.0783, 96.6455],
+        "std_bgr": [53.8556, 54.2480, 54.6537]
     }
 }
 

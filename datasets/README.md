@@ -11,14 +11,21 @@ export YOLOX_DATADIR=/path/to/your/datasets
 ```
 If `YOLOX_DATADIR` is not set, the default value of dataset directory is `./datasets` relative to your current working directory.
 
-## Expected dataset structure for [COCO detection](https://cocodataset.org/#download):
+## Expected dataset structure:
 
 ```
-COCO/
-  annotations/
-    instances_{train,val}2017.json
-  {train,val}2017/
-    # image files that are mentioned in the corresponding json
+.
+└── datasets
+    ├── SynthTree43k
+    │   ├── annotations
+    │   │   ├── trees_train.json
+    │   │   ├── trees_test.json
+    │   │   └── trees_val.json
+    │   └── *.png
+    └── CanaWikiTree200
+        ├── annotations
+        │   ├── trees_train.json
+        │   ├── trees_test.json
+        │   └── trees_val.json
+        └── *.png
 ```
-
-You can use the 2014 version of the dataset as well.

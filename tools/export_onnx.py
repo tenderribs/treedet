@@ -14,7 +14,7 @@ from yolox.models.network_blocks import SiLU
 from yolox.utils import replace_module
 from yolox.data.data_augment import preproc as preprocess
 
-from config import model_sizes
+from config import model_sizes, datasets
 
 import cv2
 
@@ -60,6 +60,7 @@ def make_parser():
     parser.add_argument("--task", default=None, type=str, help="type of task for model eval")
     parser.add_argument("-n", "--name", type=str, default=None, help="model name")
     parser.add_argument("-c", "--ckpt", default=None, type=str, help="ckpt path")
+    parser.add_argument("--dataset", default=None, type=str, help="dataset for training", choices=list(datasets.keys()), required=True)
     return parser
 
 
@@ -71,6 +72,8 @@ def main(exp=None):
 
     exp.depth, exp.width = model_sizes[args.model_size]
     exp.exp_name = f"yolox_{args.model_size}_tree_pose"
+    exp.mean_bgr = ds['mean_bgr']
+    exp.std_bgr = ds['std_bgr']
 
     if not args.experiment_name:
         args.experiment_name = exp.exp_name

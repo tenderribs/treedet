@@ -2,6 +2,7 @@
 # -*- encoding: utf-8 -*-
 # Copyright (c) 2014-2021 Megvii Inc. All rights reserved.
 
+import torch
 import torch.nn as nn
 
 from .yolo_head import YOLOXHead
@@ -16,17 +17,28 @@ class YOLOX(nn.Module):
     and detection results during test.
     """
 
-    def __init__(self, backbone=None, head=None):
+    def __init__(self, mean_bgr, std_bgr, backbone=None, head=None):
         super().__init__()
         if backbone is None:
             backbone = YOLOPAFPN()
         if head is None:
             head = YOLOXHead(80)
 
+        # Convert mean and std to tensors and reshape for broadcasting as B,C,W,H
+        self.mean_bgr = torch.tensor(mean_bgr).view(1, 3, 1, 1).float()
+        self.std_bgr = torch.tensor(std_bgr).view(1, 3, 1, 1).float()
+
         self.backbone = backbone
         self.head = head
 
     def forward(self, x, targets=None):
+        # Ensure normalization parameters are on the same device as input
+        std_bgr = self.std_bgr.to(device=x.device, dtype=x.dtype)
+        mean_bgr = self.mean_bgr.to(device=x.device, dtype=x.dtype)
+
+        # Normalize input
+        x = (x - mean_bgr) / std_bgr
+
         # fpn output content features of [dark3, dark4, dark5]
         fpn_outs = self.backbone(x)
 

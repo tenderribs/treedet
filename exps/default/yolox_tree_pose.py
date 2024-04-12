@@ -31,7 +31,7 @@ class Exp(MyExp):
         self.mean_bgr = None # gets injected by train.py at runtime
         self.std_bgr = None  # dito
         # --------------- transform config ----------------- #
-        # self.mosaic_prob = 0.0
+        self.mosaic_prob = 0.0
         # self.mixup_prob = 0.0
         # self.hsv_prob = 1.0
         # self.flip_prob = 0.0
@@ -41,11 +41,11 @@ class Exp(MyExp):
         # self.mixup_scale = (1.0, 1.0)
         # self.shear = 0.0
         # self.perspective = 0.0
-        # self.enable_mixup = False
+        self.enable_mixup = False
         # self.shape_loss = False
         # --------------  training config --------------------- #
         self.max_epoch = 100
-        # self.eval_interval = 10
+        self.eval_interval = 5
         # self.print_interval = 25
         self.basic_lr_per_img = 0.02 / 64 # batch size 32
         # -----------------  testing config ------------------ #
@@ -66,7 +66,10 @@ class Exp(MyExp):
             in_channels = [256, 512, 1024]
             backbone = YOLOPAFPN(self.depth, self.width, in_channels=in_channels, act=self.act, conv_focus=True, split_max_pool_kernel=True)
             head = YOLOXHeadKPTS(self.num_classes, self.width, in_channels=in_channels, act=self.act, default_sigmas=self.default_sigmas, num_kpts=self.num_kpts)
-            self.model = YOLOX(backbone, head)
+
+            # make sure that this is injected by the external script
+            assert self.mean_bgr is not None and self.std_bgr is not None
+            self.model = YOLOX(self.mean_bgr, self.std_bgr, backbone, head)
 
         self.model.apply(init_yolo)
         self.model.head.initialize_biases(1e-2)
@@ -95,8 +98,6 @@ class Exp(MyExp):
             dataset = TREEKPTSDataset(
                 data_dir=self.data_subdir,
                 json_file=self.train_ann,
-                mean_bgr=self.mean_bgr,
-                std_bgr=self.std_bgr,
                 num_kpts=self.num_kpts,
                 preproc=TrainTransform(
                     max_labels=50,
@@ -160,8 +161,6 @@ class Exp(MyExp):
         valdataset = TREEKPTSDataset(
             data_dir=self.data_subdir,
             json_file=self.val_ann if not testdev else self.test_ann,
-            mean_bgr=self.mean_bgr,
-            std_bgr=self.std_bgr,
             num_kpts=self.num_kpts,
             img_size=self.test_size,
             preproc=ValTransform(),
