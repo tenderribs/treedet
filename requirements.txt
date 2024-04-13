@@ -6,6 +6,8 @@ thop
 ninja
 tabulate
 tensorboard
+torchvision
 seaborn
+wandb
 onnx
 onnxruntime
