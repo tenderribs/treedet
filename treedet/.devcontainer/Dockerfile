@@ -16,3 +16,5 @@ RUN pip install --no-input --upgrade pip setuptools
 RUN pip uninstall --yes pillow
 RUN pip install --no-input -U --force-reinstall pillow-simd
 RUN pip install --no-input cython wheel numpy torchinfo pycocotools
+
+RUN catkin_init_workspace
