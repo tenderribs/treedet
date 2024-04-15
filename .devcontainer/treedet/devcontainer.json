@@ -1,7 +1,7 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/ubuntu
 {
-	"name": "Treedet",
+	"name": "Treedet ML Devel",
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
 	"build": {
 		"dockerfile": "Dockerfile"
@@ -12,14 +12,16 @@
 		"all"
 	],
 	"mounts": [
-		"source=/home/mark/datasets,target=/datasets,type=bind,consistency=cached"
+		"source=/datasets,target=/datasets,type=bind,consistency=cached"
 	],
+	// "workspaceMount": "source=${localWorkspaceFolder}/treedet,target=/workspace/treedet,type=bind",
+	// "workspaceFolder": "/workspace/treedet",
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "pip3 install --no-input -r requirements.txt && python3 setup.py develop"
+	"postCreateCommand": "cd treedet && pip install --no-input -r requirements.txt && python3 setup.py develop"
 	// Configure tool-specific properties.
 	// "customizations": {},
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
