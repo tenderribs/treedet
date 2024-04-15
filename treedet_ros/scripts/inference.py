@@ -4,6 +4,7 @@ import rospy
 
 from sensor_msgs.msg import CompressedImage
 
+
 class RateControlledSubscriber:
     def __init__(self):
         self.data_buffer = []
@@ -12,7 +13,11 @@ class RateControlledSubscriber:
         self.lock = threading.Lock()
 
         # Set up subscriber
-        self.subscriber = rospy.Subscriber("/zed2i/zed_node/rgb/image_rect_color/compressed", CompressedImage, self.callback)
+        self.subscriber = rospy.Subscriber(
+            "/zed2i/zed_node/rgb/image_rect_color/compressed",
+            CompressedImage,
+            self.callback,
+        )
 
         # Timer to process messages at a desired frequency (e.g., 1 Hz)
         self.timer = rospy.Timer(rospy.Duration(1.0), self.timer_callback)
@@ -33,7 +38,8 @@ class RateControlledSubscriber:
     def process_data(self, data):
         rospy.loginfo("Processing data")
 
-if __name__ == '__main__':
-    rospy.init_node('rate_controlled_subscriber', anonymous=True)
+
+if __name__ == "__main__":
+    rospy.init_node("rate_controlled_subscriber", anonymous=True)
     rcs = RateControlledSubscriber()
     rospy.spin()

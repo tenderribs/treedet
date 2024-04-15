@@ -3,11 +3,9 @@
 # Copyright (c) Megvii, Inc. and its affiliates.
 
 import argparse
-import os
 import random
 import warnings
 from loguru import logger
-import json
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -18,15 +16,14 @@ from yolox.utils import configure_nccl, configure_omp, get_num_devices
 
 from config import model_sizes, datasets
 
+
 def make_parser():
     parser = argparse.ArgumentParser("YOLOX train parser")
     parser.add_argument("-expn", "--experiment-name", type=str, default=None)
     parser.add_argument("-n", "--name", type=str, default=None, help="model name")
 
     # distributed
-    parser.add_argument(
-        "--dist-backend", default="nccl", type=str, help="distributed backend"
-    )
+    parser.add_argument("--dist-backend", default="nccl", type=str, help="distributed backend")
     parser.add_argument(
         "--dist-url",
         default=None,
@@ -34,11 +31,13 @@ def make_parser():
         help="url used to set up distributed training",
     )
     parser.add_argument("-b", "--batch-size", type=int, default=64, help="batch size")
+    parser.add_argument("-d", "--devices", default=None, type=int, help="device for training")
     parser.add_argument(
-        "-d", "--devices", default=None, type=int, help="device for training"
-    )
-    parser.add_argument(
-        "-w", "--workers", default=None, type=int, help="number of workers per gpu"
+        "-w",
+        "--workers",
+        default=None,
+        type=int,
+        help="number of workers per gpu",
     )
     parser.add_argument(
         "-f",
@@ -47,25 +46,30 @@ def make_parser():
         type=str,
         help="plz input your experiment description file",
     )
+    parser.add_argument("--resume", default=False, action="store_true", help="resume training")
     parser.add_argument(
-        "--resume", default=False, action="store_true", help="resume training"
+        "--dataset",
+        default=None,
+        type=str,
+        help="dataset for training",
+        choices=list(datasets.keys()),
+        required=True,
     )
-    parser.add_argument("--dataset", default=None, type=str, help="dataset for training", choices=list(datasets.keys()), required=True)
     parser.add_argument("-c", "--ckpt", default=None, type=str, help="checkpoint file")
     parser.add_argument(
         "-odw",
         "--od-weights",
         default=None,
         type=str,
-        help="weights for trained 2DOD network"
+        help="weights for trained 2DOD network",
     )
     parser.add_argument(
         "-ms",
         "--model-size",
-        choices=['s', 'm', 'l'],
+        choices=["s", "m", "l"],
         required=True,
         type=str,
-        help="Model Size (s, m, l)"
+        help="Model Size (s, m, l)",
     )
     parser.add_argument(
         "--max-epoch",
@@ -80,11 +84,12 @@ def make_parser():
         type=int,
         help="resume training start epoch",
     )
+    parser.add_argument("--num_machines", default=1, type=int, help="num of node for training")
     parser.add_argument(
-        "--num_machines", default=1, type=int, help="num of node for training"
-    )
-    parser.add_argument(
-        "--machine_rank", default=0, type=int, help="node rank for multi-node training"
+        "--machine_rank",
+        default=0,
+        type=int,
+        help="node rank for multi-node training",
     )
     parser.add_argument(
         "--fp16",
@@ -139,15 +144,16 @@ if __name__ == "__main__":
     exp.data_set = args.dataset
     ds = datasets[args.dataset]
 
-    exp.data_subdir = ds['data_subdir']
-    exp.train_ann = ds['train_ann']
-    exp.test_ann = ds['test_ann']
-    exp.val_ann = ds['val_ann']
+    exp.data_subdir = ds["data_subdir"]
+    exp.train_ann = ds["train_ann"]
+    exp.test_ann = ds["test_ann"]
+    exp.val_ann = ds["val_ann"]
 
-    exp.mean_bgr = ds['mean_bgr']
-    exp.std_bgr = ds['std_bgr']
+    exp.mean_bgr = ds["mean_bgr"]
+    exp.std_bgr = ds["std_bgr"]
 
-    if args.max_epoch: exp.max_epoch = args.max_epoch
+    if args.max_epoch:
+        exp.max_epoch = args.max_epoch
 
     # set model size
     exp.depth, exp.width = model_sizes[args.model_size]

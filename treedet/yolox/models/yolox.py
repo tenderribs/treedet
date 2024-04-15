@@ -57,9 +57,17 @@ class YOLOX(nn.Module):
                     "num_fg": num_fg,
                 }
             if isinstance(self.head, YOLOXHeadKPTS):
-                loss, iou_loss, conf_loss, cls_loss, l1_loss, kpts_loss, kpts_vis_loss, loss_l1_kpts, num_fg = self.head(
-                    fpn_outs, targets, x
-                )
+                (
+                    loss,
+                    iou_loss,
+                    conf_loss,
+                    cls_loss,
+                    l1_loss,
+                    kpts_loss,
+                    kpts_vis_loss,
+                    loss_l1_kpts,
+                    num_fg,
+                ) = self.head(fpn_outs, targets, x)
                 outputs = {
                     "total_loss": loss,
                     "iou_loss": iou_loss,

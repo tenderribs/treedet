@@ -30,7 +30,14 @@ class BaseConv(nn.Module):
     """A Conv2d -> Batchnorm -> silu/leaky relu block"""
 
     def __init__(
-        self, in_channels, out_channels, ksize, stride, groups=1, bias=False, act="silu"
+        self,
+        in_channels,
+        out_channels,
+        ksize,
+        stride,
+        groups=1,
+        bias=False,
+        act="silu",
     ):
         super().__init__()
         # same padding
@@ -67,9 +74,7 @@ class DWConv(nn.Module):
             groups=in_channels,
             act=act,
         )
-        self.pconv = BaseConv(
-            in_channels, out_channels, ksize=1, stride=1, groups=1, act=act
-        )
+        self.pconv = BaseConv(in_channels, out_channels, ksize=1, stride=1, groups=1, act=act)
 
     def forward(self, x):
         x = self.dconv(x)
@@ -107,12 +112,8 @@ class ResLayer(nn.Module):
     def __init__(self, in_channels: int):
         super().__init__()
         mid_channels = in_channels // 2
-        self.layer1 = BaseConv(
-            in_channels, mid_channels, ksize=1, stride=1, act="lrelu"
-        )
-        self.layer2 = BaseConv(
-            mid_channels, in_channels, ksize=3, stride=1, act="lrelu"
-        )
+        self.layer1 = BaseConv(in_channels, mid_channels, ksize=1, stride=1, act="lrelu")
+        self.layer2 = BaseConv(mid_channels, in_channels, ksize=3, stride=1, act="lrelu")
 
     def forward(self, x):
         out = self.layer2(self.layer1(x))
@@ -123,24 +124,31 @@ class SPPBottleneck(nn.Module):
     """Spatial pyramid pooling layer used in YOLOv3-SPP"""
 
     def __init__(
-        self, in_channels, out_channels, kernel_sizes=(5, 9, 13), activation="silu", split_max_pool_kernel=False,
+        self,
+        in_channels,
+        out_channels,
+        kernel_sizes=(5, 9, 13),
+        activation="silu",
+        split_max_pool_kernel=False,
     ):
         super().__init__()
         hidden_channels = in_channels // 2
         self.conv1 = BaseConv(in_channels, hidden_channels, 1, stride=1, act=activation)
         if not split_max_pool_kernel:
             self.m = nn.ModuleList(
-                [
-                    nn.MaxPool2d(kernel_size=ks, stride=1, padding=ks // 2)
-                    for ks in kernel_sizes
-                ]
+                [nn.MaxPool2d(kernel_size=ks, stride=1, padding=ks // 2) for ks in kernel_sizes]
             )
         else:
             max_pool_module_list = []
             for ks in kernel_sizes:
-                assert (ks-1)%2 == 0; "kernel cannot be splitted into 3x3 kernels"
-                num_3x3_maxpool = (ks-1)//2
-                max_pool_module_list.append(nn.Sequential(*num_3x3_maxpool*[nn.MaxPool2d(kernel_size=3, stride=1, padding=1)]))
+                assert (ks - 1) % 2 == 0
+                "kernel cannot be splitted into 3x3 kernels"
+                num_3x3_maxpool = (ks - 1) // 2
+                max_pool_module_list.append(
+                    nn.Sequential(
+                        *num_3x3_maxpool * [nn.MaxPool2d(kernel_size=3, stride=1, padding=1)]
+                    )
+                )
             self.m = nn.ModuleList(max_pool_module_list)
 
         conv2_channels = hidden_channels * (len(kernel_sizes) + 1)
@@ -180,7 +188,12 @@ class CSPLayer(nn.Module):
         self.conv3 = BaseConv(2 * hidden_channels, out_channels, 1, stride=1, act=act)
         module_list = [
             Bottleneck(
-                hidden_channels, hidden_channels, shortcut, 1.0, depthwise, act=act
+                hidden_channels,
+                hidden_channels,
+                shortcut,
+                1.0,
+                depthwise,
+                act=act,
             )
             for _ in range(n)
         ]

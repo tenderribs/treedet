@@ -34,7 +34,14 @@ def filter_box(output, scale_range):
     return output[keep]
 
 
-def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45, class_agnostic=False, human_pose=False):
+def postprocess(
+    prediction,
+    num_classes,
+    conf_thre=0.7,
+    nms_thre=0.45,
+    class_agnostic=False,
+    human_pose=False,
+):
     box_corner = prediction.new(prediction.shape)
     box_corner[:, :, 0] = prediction[:, :, 0] - prediction[:, :, 2] / 2
     box_corner[:, :, 1] = prediction[:, :, 1] - prediction[:, :, 3] / 2
@@ -49,7 +56,7 @@ def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45, class_agn
         if not image_pred.size(0):
             continue
         # Get score and class with highest confidence
-        class_conf, class_pred = torch.max(image_pred[:, 5: 5 + num_classes], 1, keepdim=True)
+        class_conf, class_pred = torch.max(image_pred[:, 5 : 5 + num_classes], 1, keepdim=True)
 
         conf_mask = (image_pred[:, 4] * class_conf.squeeze() >= conf_thre).squeeze()
         if not human_pose:
@@ -57,7 +64,15 @@ def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45, class_agn
             detections = torch.cat((image_pred[:, :5], class_conf, class_pred.float()), 1)
         else:
             # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred, kpts)
-            detections = torch.cat((image_pred[:, :5], class_conf, class_pred.float(), image_pred[:, 6:]), 1)
+            detections = torch.cat(
+                (
+                    image_pred[:, :5],
+                    class_conf,
+                    class_pred.float(),
+                    image_pred[:, 6:],
+                ),
+                1,
+            )
 
         detections = detections[conf_mask]
         if not detections.size(0):
@@ -85,7 +100,10 @@ def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45, class_agn
 
     return output
 
-def postprocess_object_pose(prediction, num_classes, conf_thre=0.7, nms_thre=0.45, class_agnostic=False):
+
+def postprocess_object_pose(
+    prediction, num_classes, conf_thre=0.7, nms_thre=0.45, class_agnostic=False
+):
     box_corner = prediction.new(prediction.shape)
     box_corner[:, :, 0] = prediction[:, :, 0] - prediction[:, :, 2] / 2
     box_corner[:, :, 1] = prediction[:, :, 1] - prediction[:, :, 3] / 2
@@ -100,10 +118,18 @@ def postprocess_object_pose(prediction, num_classes, conf_thre=0.7, nms_thre=0.4
         if not image_pred.size(0):
             continue
         # Get score and class with highest confidence
-        class_conf, class_pred = torch.max(image_pred[:, 5: 5 + num_classes], 1, keepdim=True)
+        class_conf, class_pred = torch.max(image_pred[:, 5 : 5 + num_classes], 1, keepdim=True)
         conf_mask = (image_pred[:, 4] * class_conf.squeeze() >= conf_thre).squeeze()
         # Detections ordered as (x1, y1, x2, y2, obj_conf, R, T, class_conf, class_pred)
-        detections = torch.cat((image_pred[:, :5], image_pred[:, -9:], class_conf, class_pred.float()), 1)
+        detections = torch.cat(
+            (
+                image_pred[:, :5],
+                image_pred[:, -9:],
+                class_conf,
+                class_pred.float(),
+            ),
+            1,
+        )
         detections = detections[conf_mask]
         if not detections.size(0):
             continue
@@ -135,7 +161,12 @@ def postprocess_export(prediction, num_classes, conf_thre=0.7, nms_thre=0.45, ta
     """
     This function is called while exporting an OD model or human-pose estimation model. Output of the ONNX model is ensured to match the TIDL output in float mode.
     """
-    cx, cy, w, h = prediction[..., 0:1], prediction[..., 1:2], prediction[..., 2:3], prediction[..., 3:4]
+    cx, cy, w, h = (
+        prediction[..., 0:1],
+        prediction[..., 1:2],
+        prediction[..., 2:3],
+        prediction[..., 3:4],
+    )
     box = cxcywh2xyxy_export(cx, cy, w, h)
     prediction[:, :, :4] = box
 
@@ -148,13 +179,13 @@ def postprocess_export(prediction, num_classes, conf_thre=0.7, nms_thre=0.45, ta
             continue
 
         # Get score and class with highest confidence
-        class_conf, class_pred = torch.max(image_pred[:, 5: 5 + num_classes], 1, keepdim=True)
-        conf =  image_pred[:, 4:5] * class_conf
+        class_conf, class_pred = torch.max(image_pred[:, 5 : 5 + num_classes], 1, keepdim=True)
+        conf = image_pred[:, 4:5] * class_conf
         conf_mask = (conf.squeeze() >= conf_thre).squeeze()
 
         # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred)
         tensor_cat_inp = [image_pred[:, :4], conf, class_pred.float()]
-        tensor_cat_inp.extend([image_pred[:,6:]])
+        tensor_cat_inp.extend([image_pred[:, 6:]])
         detections = torch.cat(tensor_cat_inp, 1)
         detections = detections[conf_mask]
 
@@ -165,17 +196,24 @@ def postprocess_export(prediction, num_classes, conf_thre=0.7, nms_thre=0.45, ta
 
     return output
 
-def postprocess_export_object_pose(prediction, num_classes, conf_thre=0.7, nms_thre=0.45, camera_matrix=None):
+
+def postprocess_export_object_pose(
+    prediction, num_classes, conf_thre=0.7, nms_thre=0.45, camera_matrix=None
+):
     """
     This function is called while exporting an ObjectPose model. Output of the ONNX model is ensured to match the TIDL output in float mode.
     """
-    cx, cy, w, h = prediction[..., 0:1], prediction[..., 1:2], prediction[..., 2:3], prediction[..., 3:4]
+    cx, cy, w, h = (
+        prediction[..., 0:1],
+        prediction[..., 1:2],
+        prediction[..., 2:3],
+        prediction[..., 3:4],
+    )
     box = cxcywh2xyxy_export(cx, cy, w, h)
     prediction[:, :, :4] = box
 
     # tx = ((pose[11] / r_w) - camera_matrix[2]) * tz / camera_matrix[0]
     # ty = ((pose[12] / r_h) - camera_matrix[5]) * tz / camera_matrix[4]
-
 
     # Transform the translation vector in expected format
     tx, ty, tz = prediction[..., -3], prediction[..., -2], prediction[..., -1]
@@ -191,7 +229,7 @@ def postprocess_export_object_pose(prediction, num_classes, conf_thre=0.7, nms_t
         if not image_pred.size(0):
             continue
         # Get score and class with highest confidence
-        class_conf, class_pred = torch.max(image_pred[:, 5: 5 + num_classes], 1, keepdim=True)
+        class_conf, class_pred = torch.max(image_pred[:, 5 : 5 + num_classes], 1, keepdim=True)
         conf = image_pred[:, 4:5] * class_conf
         conf_mask = (conf.squeeze() >= conf_thre).squeeze()
         # Detections ordered as (x1, y1, x2, y2, obj_conf, R, T, class_conf, class_pred)
@@ -203,7 +241,7 @@ def postprocess_export_object_pose(prediction, num_classes, conf_thre=0.7, nms_t
 
         nms_out_index = torchvision.ops.nms(
             detections[:, :4] + class_2d_offset,
-            detections[:, 4] ,
+            detections[:, 4],
             nms_thre,
         )
 
@@ -214,7 +252,6 @@ def postprocess_export_object_pose(prediction, num_classes, conf_thre=0.7, nms_t
             output[i] = torch.cat((output[i], detections))
 
     return output
-
 
 
 def bboxes_iou(bboxes_a, bboxes_b, xyxy=True):
@@ -263,10 +300,10 @@ def adjust_box_anns(bbox, scale_ratio, padw, padh, w_max, h_max):
 
 
 def adjust_kpts_anns(kpts, scale_ratio, padw, padh, w_max, h_max):
-    kpts[:, 0::2][kpts[:, 0::2]!=0] = kpts[:, 0::2][kpts[:, 0::2]!=0] * scale_ratio + padw
-    kpts[:, 1::2][kpts[:, 1::2]!=0] = kpts[:, 1::2][kpts[:, 1::2]!=0] * scale_ratio + padh
-    kpts[:, 0::2] = np.clip(kpts[:, 0::2] , 0, w_max)
-    kpts[:, 1::2] = np.clip(kpts[:, 1::2] , 0, h_max)
+    kpts[:, 0::2][kpts[:, 0::2] != 0] = kpts[:, 0::2][kpts[:, 0::2] != 0] * scale_ratio + padw
+    kpts[:, 1::2][kpts[:, 1::2] != 0] = kpts[:, 1::2][kpts[:, 1::2] != 0] * scale_ratio + padh
+    kpts[:, 0::2] = np.clip(kpts[:, 0::2], 0, w_max)
+    kpts[:, 1::2] = np.clip(kpts[:, 1::2], 0, h_max)
     return kpts
 
 
@@ -291,11 +328,12 @@ def cxcywh2xyxy(bboxes):
     bboxes[:, 3] = bboxes[:, 1] + bboxes[:, 3]  # bottom right y
     return bboxes
 
-def cxcywh2xyxy_export(cx,cy,w,h):
-    #This function is used while exporting ONNX models
+
+def cxcywh2xyxy_export(cx, cy, w, h):
+    # This function is used while exporting ONNX models
     # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
-    halfw = w/2
-    halfh = h/2
+    halfw = w / 2
+    halfh = h / 2
     xmin = cx - halfw  # top left x
     ymin = cy - halfh  # top left y
     xmax = cx + halfw  # bottom right x
@@ -304,7 +342,15 @@ def cxcywh2xyxy_export(cx,cy,w,h):
 
 
 class PostprocessExport(nn.Module):
-    def __init__(self, conf_thre=0.7, nms_thre=0.45, num_classes=80, object_pose=False, camera_matrix=None, task=None):
+    def __init__(
+        self,
+        conf_thre=0.7,
+        nms_thre=0.45,
+        num_classes=80,
+        object_pose=False,
+        camera_matrix=None,
+        task=None,
+    ):
         super(PostprocessExport, self).__init__()
         self.conf_thre = conf_thre
         self.nms_thre = nms_thre
@@ -315,7 +361,18 @@ class PostprocessExport(nn.Module):
 
     def forward(self, prediction):
         if not self.object_pose:
-            return postprocess_export(prediction, self.num_classes, conf_thre=self.conf_thre, nms_thre=self.nms_thre, task=self.task)
+            return postprocess_export(
+                prediction,
+                self.num_classes,
+                conf_thre=self.conf_thre,
+                nms_thre=self.nms_thre,
+                task=self.task,
+            )
         else:
-            return postprocess_export_object_pose(prediction, self.num_classes, conf_thre=self.conf_thre, nms_thre=self.nms_thre, camera_matrix=self.camera_matrix)
-
+            return postprocess_export_object_pose(
+                prediction,
+                self.num_classes,
+                conf_thre=self.conf_thre,
+                nms_thre=self.nms_thre,
+                camera_matrix=self.camera_matrix,
+            )

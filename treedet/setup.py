@@ -41,10 +41,7 @@ def get_extensions():
 
 
 with open("yolox/__init__.py", "r") as f:
-    version = re.search(
-        r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]',
-        f.read(), re.MULTILINE
-    ).group(1)
+    version = re.search(r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]', f.read(), re.MULTILINE).group(1)
 
 
 setuptools.setup(
@@ -53,7 +50,10 @@ setuptools.setup(
     author="basedet team",
     python_requires=">=3.6",
     ext_modules=get_extensions(),
-    classifiers=["Programming Language :: Python :: 3", "Operating System :: OS Independent"],
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "Operating System :: OS Independent",
+    ],
     cmdclass={"build_ext": torch.utils.cpp_extension.BuildExtension},
     packages=setuptools.find_packages(),
 )

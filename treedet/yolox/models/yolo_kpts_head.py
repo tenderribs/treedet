@@ -16,6 +16,7 @@ from .network_blocks import BaseConv, DWConv
 
 from torchvision.ops import nms
 
+
 class YOLOXHeadKPTS(nn.Module):
     def __init__(
         self,
@@ -25,8 +26,8 @@ class YOLOXHeadKPTS(nn.Module):
         in_channels=[256, 512, 1024],
         act="silu",
         depthwise=False,
-        num_kpts = 17,
-        default_sigmas=None
+        num_kpts=17,
+        default_sigmas=None,
     ):
         """
         Args:
@@ -53,8 +54,38 @@ class YOLOXHeadKPTS(nn.Module):
         self.stems = nn.ModuleList()
         if default_sigmas is None:
             raise RuntimeError("default_sigmas must not be None")
-        self.sigmas = torch.tensor([.26, .25, .25, .35, .35, .79, .79, .72, .72, .62, .62, 1.07, 1.07, .87, .87, .89, .89]) / 10.0 \
-            if default_sigmas else torch.tensor([.89, ]*self.num_kpts) / 10.0
+        self.sigmas = (
+            torch.tensor(
+                [
+                    0.26,
+                    0.25,
+                    0.25,
+                    0.35,
+                    0.35,
+                    0.79,
+                    0.79,
+                    0.72,
+                    0.72,
+                    0.62,
+                    0.62,
+                    1.07,
+                    1.07,
+                    0.87,
+                    0.87,
+                    0.89,
+                    0.89,
+                ]
+            )
+            / 10.0
+            if default_sigmas
+            else torch.tensor(
+                [
+                    0.89,
+                ]
+                * self.num_kpts
+            )
+            / 10.0
+        )
         Conv = DWConv if depthwise else BaseConv
 
         for i in range(len(in_channels)):
@@ -167,7 +198,7 @@ class YOLOXHeadKPTS(nn.Module):
         self.use_l1 = False
         self.l1_loss = nn.L1Loss(reduction="none")
         self.bcewithlog_loss = nn.BCEWithLogitsLoss(reduction="none")
-        self.iou_loss = IOUloss(reduction="none" ,loss_type="ciou")
+        self.iou_loss = IOUloss(reduction="none", loss_type="ciou")
         self.strides = strides
         self.grids = [torch.zeros(1)] * len(in_channels)
 
@@ -190,8 +221,20 @@ class YOLOXHeadKPTS(nn.Module):
         y_shifts = []
         expanded_strides = []
 
-        for k, (cls_conv, reg_conv, kpts_conv, stride_this_level, x) in enumerate(
-            zip(self.cls_convs, self.reg_convs, self.kpts_convs, self.strides, xin)
+        for k, (
+            cls_conv,
+            reg_conv,
+            kpts_conv,
+            stride_this_level,
+            x,
+        ) in enumerate(
+            zip(
+                self.cls_convs,
+                self.reg_convs,
+                self.kpts_convs,
+                self.strides,
+                xin,
+            )
         ):
             x = self.stems[k](x)
             cls_x = x
@@ -210,41 +253,34 @@ class YOLOXHeadKPTS(nn.Module):
 
             if self.training:
                 output = torch.cat([reg_output, obj_output, cls_output, kpts_output], 1)
-                output, grid = self.get_output_and_grid(
-                    output, k, stride_this_level, xin[0].type()
-                )
+                output, grid = self.get_output_and_grid(output, k, stride_this_level, xin[0].type())
                 x_shifts.append(grid[:, :, 0])
                 y_shifts.append(grid[:, :, 1])
                 expanded_strides.append(
-                    torch.zeros(1, grid.shape[1])
-                    .fill_(stride_this_level)
-                    .type_as(xin[0])
+                    torch.zeros(1, grid.shape[1]).fill_(stride_this_level).type_as(xin[0])
                 )
                 if self.use_l1:
                     batch_size = reg_output.shape[0]
                     hsize, wsize = reg_output.shape[-2:]
-                    reg_output = reg_output.view(
-                        batch_size, self.n_anchors, 4, hsize, wsize
-                    )
-                    reg_output = reg_output.permute(0, 1, 3, 4, 2).reshape(
-                        batch_size, -1, 4
-                    )
+                    reg_output = reg_output.view(batch_size, self.n_anchors, 4, hsize, wsize)
+                    reg_output = reg_output.permute(0, 1, 3, 4, 2).reshape(batch_size, -1, 4)
                     origin_preds.append(reg_output.clone())
                     kpts_output = kpts_output.view(
-                        batch_size, self.n_anchors, 3*self.num_kpts, hsize, wsize
+                        batch_size,
+                        self.n_anchors,
+                        3 * self.num_kpts,
+                        hsize,
+                        wsize,
                     )
                     kpts_output = kpts_output.permute(0, 1, 3, 4, 2).reshape(
-                        batch_size, -1,  3*self.num_kpts
+                        batch_size, -1, 3 * self.num_kpts
                     )
                     kpts_output = kpts_output[..., self.kpt_index]
                     origin_kpts_preds.append(kpts_output.clone())
 
-
             else:
-                output = torch.cat(
-                    [reg_output, obj_output, cls_output, kpts_output], 1
-                )
-                output[:,4:6,:,:] = torch.sigmoid(output[:,4:6,:,:])
+                output = torch.cat([reg_output, obj_output, cls_output, kpts_output], 1)
+                output[:, 4:6, :, :] = torch.sigmoid(output[:, 4:6, :, :])
 
             outputs.append(output)
 
@@ -265,9 +301,7 @@ class YOLOXHeadKPTS(nn.Module):
         else:
             self.hw = [x.shape[-2:] for x in outputs]
             # [batch, n_anchors_all, 85]
-            outputs = torch.cat(
-                [x.flatten(start_dim=2) for x in outputs], dim=2
-            ).permute(0, 2, 1)
+            outputs = torch.cat([x.flatten(start_dim=2) for x in outputs], dim=2).permute(0, 2, 1)
             if self.decode_in_inference:
                 return self.decode_outputs(outputs, dtype=xin[0].type())
             else:
@@ -277,7 +311,7 @@ class YOLOXHeadKPTS(nn.Module):
         grid = self.grids[k]
 
         batch_size = output.shape[0]
-        n_ch = 5 + self.num_classes+ 3*self.num_kpts
+        n_ch = 5 + self.num_classes + 3 * self.num_kpts
         hsize, wsize = output.shape[-2:]
         if grid.shape[2:4] != output.shape[2:4]:
             yv, xv = torch.meshgrid([torch.arange(hsize), torch.arange(wsize)])
@@ -289,13 +323,15 @@ class YOLOXHeadKPTS(nn.Module):
             batch_size, self.n_anchors * hsize * wsize, -1
         )
         grid = grid.view(1, -1, 2)
-        kpt_conf_grids = torch.zeros_like(grid)[...,0:1]
+        kpt_conf_grids = torch.zeros_like(grid)[..., 0:1]
         kpt_grids = torch.cat((grid, kpt_conf_grids), dim=2)
 
         output[..., :2] = (output[..., :2] + grid) * stride
         output[..., 2:4] = torch.exp(output[..., 2:4]) * stride
-        #output[..., 6:] = (output[..., 6:] +  kpt_grids.repeat(1,1,self.num_kpts)) * stride
-        output[..., 6:] = (2*output[..., 6:] -0.5 +  kpt_grids.repeat(1,1,self.num_kpts)) * stride
+        # output[..., 6:] = (output[..., 6:] +  kpt_grids.repeat(1,1,self.num_kpts)) * stride
+        output[..., 6:] = (
+            2 * output[..., 6:] - 0.5 + kpt_grids.repeat(1, 1, self.num_kpts)
+        ) * stride
         return output, grid
 
     def decode_outputs(self, outputs, dtype):
@@ -309,7 +345,7 @@ class YOLOXHeadKPTS(nn.Module):
             strides.append(torch.full((*shape, 1), stride))
 
         grids = torch.cat(grids, dim=1).type(dtype)
-        kpt_conf_grids = torch.zeros_like(grids)[...,0:1]
+        kpt_conf_grids = torch.zeros_like(grids)[..., 0:1]
         kpt_grids = torch.cat((grids, kpt_conf_grids), dim=2)
         strides = torch.cat(strides, dim=1).type(dtype)
 
@@ -320,24 +356,31 @@ class YOLOXHeadKPTS(nn.Module):
         # the logic is explained here: https://github.com/ultralytics/yolov5/issues/1585#issuecomment-739060912
         #
         # TL;DR: factor 2 gives more range to sigmoid output, -0.5 centers output range around 0.5
-        outputs[...,  6:] = (2*outputs[..., 6:] - 0.5  + kpt_grids.repeat(1,1,self.num_kpts)) * strides
+        outputs[..., 6:] = (
+            2 * outputs[..., 6:] - 0.5 + kpt_grids.repeat(1, 1, self.num_kpts)
+        ) * strides
 
         # convert kpts conf to probabilities
         outputs[..., 8::3] = torch.sigmoid(outputs[..., 8::3])
 
         results = []
         for i in range(outputs.shape[0]):
-            output = outputs[i] # for each image in batch
+            output = outputs[i]  # for each image in batch
 
             # Get score and class with highest confidence
-            class_conf, class_pred = torch.max(output[:, 5: 5 + self.num_classes], 1, keepdim=True)
+            class_conf, class_pred = torch.max(output[:, 5 : 5 + self.num_classes], 1, keepdim=True)
 
             # conf = objectness * class_conf
-            conf =  output[:, 4:5] * class_conf
+            conf = output[:, 4:5] * class_conf
 
             # Reassemble output in more sensible format
             # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred, kpts)
-            tensor_cat_inp = [output[:, :4], conf, class_pred.float(), output[:, 6:]]
+            tensor_cat_inp = [
+                output[:, :4],
+                conf,
+                class_pred.float(),
+                output[:, 6:],
+            ]
             detections = torch.cat(tensor_cat_inp, 1)
 
             # filter the low-confidence results
@@ -370,8 +413,8 @@ class YOLOXHeadKPTS(nn.Module):
     ):
         bbox_preds = outputs[:, :, :4]  # [batch, n_anchors_all, 4]
         obj_preds = outputs[:, :, 4].unsqueeze(-1)  # [batch, n_anchors_all, 1]
-        cls_preds = outputs[:, :, 5 : 5+self.num_classes]  # [batch, n_anchors_all, n_cls]
-        kpts_preds = outputs[:, :, 5+self.num_classes:]
+        cls_preds = outputs[:, :, 5 : 5 + self.num_classes]  # [batch, n_anchors_all, n_cls]
+        kpts_preds = outputs[:, :, 5 + self.num_classes :]
 
         # calculate targets
         mixup = labels.shape[2] > 5
@@ -406,9 +449,9 @@ class YOLOXHeadKPTS(nn.Module):
             if num_gt == 0:
                 cls_target = outputs.new_zeros((0, self.num_classes))
                 reg_target = outputs.new_zeros((0, 4))
-                kpts_target = outputs.new_zeros((0, 2*self.num_kpts))
+                kpts_target = outputs.new_zeros((0, 2 * self.num_kpts))
                 l1_target = outputs.new_zeros((0, 4))
-                l1_target_kpts = outputs.new_zeros((0, 2*self.num_kpts))
+                l1_target_kpts = outputs.new_zeros((0, 2 * self.num_kpts))
                 obj_target = outputs.new_zeros((total_num_anchors, 1))
                 fg_mask = outputs.new_zeros(total_num_anchors).bool()
             else:
@@ -475,9 +518,9 @@ class YOLOXHeadKPTS(nn.Module):
                 torch.cuda.empty_cache()
                 num_fg += num_fg_img
 
-                cls_target = F.one_hot(
-                    gt_matched_classes.to(torch.int64), self.num_classes
-                ) * 1.0  #* pred_ious_this_matching.unsqueeze(-1)  #Modified for single class detecetion. This is probably not needed for single class detection
+                cls_target = (
+                    F.one_hot(gt_matched_classes.to(torch.int64), self.num_classes) * 1.0
+                )  # * pred_ious_this_matching.unsqueeze(-1)  #Modified for single class detecetion. This is probably not needed for single class detection
                 obj_target = fg_mask.unsqueeze(-1)
                 reg_target = gt_bboxes_per_image[matched_gt_inds]
                 kpts_target = gt_kpts_per_image[matched_gt_inds]
@@ -490,13 +533,12 @@ class YOLOXHeadKPTS(nn.Module):
                         y_shifts=y_shifts[0][fg_mask],
                     )
                     l1_target_kpts = self.get_l1_target_kpts(
-                        outputs.new_zeros((num_fg_img, 2*self.num_kpts)),
+                        outputs.new_zeros((num_fg_img, 2 * self.num_kpts)),
                         gt_kpts_per_image[matched_gt_inds],
                         expanded_strides[0][fg_mask],
                         x_shifts=x_shifts[0][fg_mask],
                         y_shifts=y_shifts[0][fg_mask],
                     )
-
 
             cls_targets.append(cls_target)
             reg_targets.append(reg_target)
@@ -517,29 +559,34 @@ class YOLOXHeadKPTS(nn.Module):
             l1_targets_kpts = torch.cat(l1_targets_kpts, 0)
 
         num_fg = max(num_fg, 1)
-        loss_iou = (
-            self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], reg_targets)
-        ).sum() / num_fg
-        loss_obj = (
-            self.bcewithlog_loss(obj_preds.view(-1, 1), obj_targets)
-        ).sum() / num_fg
+        loss_iou = (self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], reg_targets)).sum() / num_fg
+        loss_obj = (self.bcewithlog_loss(obj_preds.view(-1, 1), obj_targets)).sum() / num_fg
         loss_cls = (
-            self.bcewithlog_loss(
-                cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets
-            )
+            self.bcewithlog_loss(cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets)
         ).sum() / num_fg
         loss_kpts, loss_kpts_vis = self.kpts_loss(
-                kpts_preds.view(-1, self.num_kpts*3)[fg_masks], kpts_targets, reg_targets)
+            kpts_preds.view(-1, self.num_kpts * 3)[fg_masks],
+            kpts_targets,
+            reg_targets,
+        )
         loss_kpts = loss_kpts.sum() / num_fg
         loss_kpts_vis = loss_kpts_vis.sum() / num_fg
 
         if self.use_l1:
-            loss_l1 = (
-                self.l1_loss(origin_preds.view(-1, 4)[fg_masks], l1_targets)
-            ).sum() / num_fg
-            loss_l1_kpts = ((
-                self.l1_loss(origin_kpts_preds.view(-1, 2*self.num_kpts)[fg_masks], l1_targets_kpts))*(l1_targets_kpts!=0)
-           ).sum() / num_fg / self.num_kpts
+            loss_l1 = (self.l1_loss(origin_preds.view(-1, 4)[fg_masks], l1_targets)).sum() / num_fg
+            loss_l1_kpts = (
+                (
+                    (
+                        self.l1_loss(
+                            origin_kpts_preds.view(-1, 2 * self.num_kpts)[fg_masks],
+                            l1_targets_kpts,
+                        )
+                    )
+                    * (l1_targets_kpts != 0)
+                ).sum()
+                / num_fg
+                / self.num_kpts
+            )
             loss_l1 = 0.0
             loss_l1_kpts = 0
         else:
@@ -547,7 +594,15 @@ class YOLOXHeadKPTS(nn.Module):
             loss_l1_kpts = 0
 
         reg_weight = 5.0
-        loss = reg_weight * loss_iou + loss_obj + loss_cls + loss_l1 + reg_weight * loss_kpts + loss_kpts_vis + loss_l1_kpts
+        loss = (
+            reg_weight * loss_iou
+            + loss_obj
+            + loss_cls
+            + loss_l1
+            + reg_weight * loss_kpts
+            + loss_kpts_vis
+            + loss_l1_kpts
+        )
 
         return (
             loss,
@@ -572,9 +627,9 @@ class YOLOXHeadKPTS(nn.Module):
         l1_target[:, 0::2] = gt_kpts[:, 0::2] / stride[:, None] - x_shifts[:, None]
         l1_target[:, 1::2] = gt_kpts[:, 1::2] / stride[:, None] - y_shifts[:, None]
         l1_target = l1_target * (gt_kpts != 0)
-        #Extra transfornation in key_point prediction
-        #l1_target[:, 4:] = (l1_target[:, 4:] + 0.5)/2.0  #matching transfonration with YOLOv5
-        #l1_target[:, 4:] = torch.pow(abs(l1_target[:, 4:]), 1/3)  * torch.sign(l1_target[:, 4:]) # This may help in quantization
+        # Extra transfornation in key_point prediction
+        # l1_target[:, 4:] = (l1_target[:, 4:] + 0.5)/2.0  #matching transfonration with YOLOv5
+        # l1_target[:, 4:] = torch.pow(abs(l1_target[:, 4:]), 1/3)  * torch.sign(l1_target[:, 4:]) # This may help in quantization
         return l1_target
 
     @torch.no_grad()
@@ -647,11 +702,7 @@ class YOLOXHeadKPTS(nn.Module):
             ).sum(-1)
         del cls_preds_
 
-        cost = (
-            pair_wise_cls_loss
-            + 3.0 * pair_wise_ious_loss
-            + 100000.0 * (~is_in_boxes_and_center)
-        )
+        cost = pair_wise_cls_loss + 3.0 * pair_wise_ious_loss + 100000.0 * (~is_in_boxes_and_center)
 
         (
             num_fg,
@@ -688,14 +739,10 @@ class YOLOXHeadKPTS(nn.Module):
         x_shifts_per_image = x_shifts[0] * expanded_strides_per_image
         y_shifts_per_image = y_shifts[0] * expanded_strides_per_image
         x_centers_per_image = (
-            (x_shifts_per_image + 0.5 * expanded_strides_per_image)
-            .unsqueeze(0)
-            .repeat(num_gt, 1)
+            (x_shifts_per_image + 0.5 * expanded_strides_per_image).unsqueeze(0).repeat(num_gt, 1)
         )  # [n_anchor] -> [n_gt, n_anchor]
         y_centers_per_image = (
-            (y_shifts_per_image + 0.5 * expanded_strides_per_image)
-            .unsqueeze(0)
-            .repeat(num_gt, 1)
+            (y_shifts_per_image + 0.5 * expanded_strides_per_image).unsqueeze(0).repeat(num_gt, 1)
         )
 
         gt_bboxes_per_image_l = (
@@ -770,9 +817,7 @@ class YOLOXHeadKPTS(nn.Module):
         topk_ious, _ = torch.topk(ious_in_boxes_matrix, n_candidate_k, dim=1)
         dynamic_ks = torch.clamp(topk_ious.sum(1).int(), min=1)
         for gt_idx in range(num_gt):
-            _, pos_idx = torch.topk(
-                cost[gt_idx], k=dynamic_ks[gt_idx].item(), largest=False
-            )
+            _, pos_idx = torch.topk(cost[gt_idx], k=dynamic_ks[gt_idx].item(), largest=False)
             matching_matrix[gt_idx][pos_idx] = 1.0
 
         del topk_ious, dynamic_ks, pos_idx
@@ -790,22 +835,30 @@ class YOLOXHeadKPTS(nn.Module):
         matched_gt_inds = matching_matrix[:, fg_mask_inboxes].argmax(0)
         gt_matched_classes = gt_classes[matched_gt_inds]
 
-        pred_ious_this_matching = (matching_matrix * pair_wise_ious).sum(0)[
-            fg_mask_inboxes
-        ]
-        return num_fg, gt_matched_classes, pred_ious_this_matching, matched_gt_inds
-
+        pred_ious_this_matching = (matching_matrix * pair_wise_ious).sum(0)[fg_mask_inboxes]
+        return (
+            num_fg,
+            gt_matched_classes,
+            pred_ious_this_matching,
+            matched_gt_inds,
+        )
 
     def kpts_loss(self, kpts_preds, kpts_targets, bbox_targets):
         sigmas = self.sigmas.to(device=kpts_preds.device)
 
         # preds are in format [x,y,conf] * num_kpts, targs as [x,y] * num_kpts
-        kpts_preds_x, kpts_targets_x = kpts_preds[:, 0::3], kpts_targets[:, 0::2]
-        kpts_preds_y, kpts_targets_y = kpts_preds[:, 1::3], kpts_targets[:, 1::2]
+        kpts_preds_x, kpts_targets_x = (
+            kpts_preds[:, 0::3],
+            kpts_targets[:, 0::2],
+        )
+        kpts_preds_y, kpts_targets_y = (
+            kpts_preds[:, 1::3],
+            kpts_targets[:, 1::2],
+        )
         kpts_preds_score = kpts_preds[:, 2::3]
 
         # mask of visible kpts
-        kpt_mask = (kpts_targets[:, 0::2] != 0)
+        kpt_mask = kpts_targets[:, 0::2] != 0
 
         # calculate visibility loss (l_{kpts_conf} in paper) based on binary cross entropy
         # using ground truth visibility as ground truth
@@ -815,10 +868,13 @@ class YOLOXHeadKPTS(nn.Module):
         d = (kpts_preds_x - kpts_targets_x) ** 2 + (kpts_preds_y - kpts_targets_y) ** 2
 
         # scale derived from bbox gt area (w * h)
-        bbox_scale = torch.prod(bbox_targets[:, -2:], dim=1, keepdim=True)  #scale derived from bbox gt
-        kpt_loss_factor = (torch.sum(kpt_mask != 0) + torch.sum(kpt_mask == 0)) / torch.sum(kpt_mask != 0)
+        bbox_scale = torch.prod(
+            bbox_targets[:, -2:], dim=1, keepdim=True
+        )  # scale derived from bbox gt
+        kpt_loss_factor = (torch.sum(kpt_mask != 0) + torch.sum(kpt_mask == 0)) / torch.sum(
+            kpt_mask != 0
+        )
         oks = torch.exp(-d / (bbox_scale * (4 * sigmas**2) + 1e-9))
         lkpt = kpt_loss_factor * ((1 - oks) * kpt_mask).mean(axis=1)
 
         return lkpt, lkptv
-
