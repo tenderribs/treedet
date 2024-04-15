@@ -83,11 +83,13 @@ class RateControlledSubscriber:
         ort_inputs = {self.session.get_inputs()[0].name: img[None, :, :, :]}
         output = self.session.run(None, ort_inputs)
 
-        print(f"preproc + inf: {round((time.perf_counter() - start_time) * 1000, 3)} ms")
+        print(
+            f"preproc + inf: {round((time.perf_counter() - start_time) * 1000, 3)} ms"
+        )
 
         dets = output[0]
 
-        dets = dets[dets[:, 4] >= 0.9]
+        dets = dets[dets[:, 4] >= 0.95]
 
         # rescale bbox and kpts
         dets[:, :4] /= ratio
