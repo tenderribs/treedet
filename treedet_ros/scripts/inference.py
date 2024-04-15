@@ -9,12 +9,18 @@ import cv2
 import time
 
 from cv_bridge import CvBridge
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import Image, CompressedImage
 
 br = CvBridge()
 
+# taken from P matrix published by /zed2i/zed_node/depth/camera_info
+fx = 487.29986572265625
+fy = 487.29986572265625
+cx = 325.617431640625
+cy = 189.09378051757812
 
-def preprocess(img, input_size, swap=(2, 0, 1)):
+
+def preprocess_rgb(img, input_size, swap=(2, 0, 1)):
     assert len(img.shape) == 3
 
     # initialize padded image with "neutral" color 114
@@ -37,101 +43,110 @@ def preprocess(img, input_size, swap=(2, 0, 1)):
     return np.ascontiguousarray(padded_img, dtype=np.float32), r
 
 
-class RateControlledSubscriber:
+class CameraSubscriber:
     def __init__(self):
-        self.data_buffer = []
-
-        # lock prevents simulataneous R/W to the buffer
-        self.lock = threading.Lock()
-
-        self.subscriber = rospy.Subscriber(
-            "/zed2i/zed_node/rgb/image_rect_color/compressed",
-            CompressedImage,
-            self.callback,
-        )
-
-        # Timer to process messages at a desired frequency (e.g., 1 Hz)
-        self.timer = rospy.Timer(rospy.Duration(1 / 15), self.timer_callback)
-
         package_path = rospkg.RosPack().get_path("treedet_ros")
         model_path = os.path.join(package_path, "model.onnx")
         self.session = onnxruntime.InferenceSession(model_path)
         print("Loaded Model")
 
-    def callback(self, data):
+        self.data_buffer = ([], [])  # RGB, Depth
+
+        # lock prevents simulataneous R/W to the buffer
+        self.lock = threading.Lock()
+
+        self.rgb_subscriber = rospy.Subscriber(
+            "/zed2i/zed_node/rgb/image_rect_color/compressed",
+            CompressedImage,
+            self.rgb_callback,
+        )
+
+        self.rgb_subscriber = rospy.Subscriber(
+            "/zed2i/zed_node/depth/depth_registered",
+            Image,
+            self.depth_callback,
+        )
+        # Timer to process messages at a desired frequency (e.g., 1 Hz)
+        self.timer = rospy.Timer(rospy.Duration(1 / 1), self.timer_callback)
+
+    def rgb_callback(self, comp_image: CompressedImage):
         with self.lock:
-            self.data_buffer.append(data)
+            self.data_buffer[0].append(comp_image)
+
+    def depth_callback(self, img: Image):
+        with self.lock:
+            self.data_buffer[1].append(img)
 
     def timer_callback(self, event):
         with self.lock:
-            if self.data_buffer:
+            if self.data_buffer[0] and self.data_buffer[1]:
                 # Process the last message received
-                message_to_process = self.data_buffer[-1]
-                self.process_img(message_to_process)
-                self.data_buffer = []
+                rgb = self.data_buffer[0][-1]
+                depth = self.data_buffer[1][-1]
 
-    def process_img(self, data: CompressedImage):
-        origin_img = br.compressed_imgmsg_to_cv2(data)
-        origin_img = origin_img[:, :, :3]  # cut out the alpha channel (bgra8 -> bgr8)
+                self.process_imgs(rgb, depth)
+                self.data_buffer = ([], [])
+
+    def get_detections(self, raw_dets: list, rescale_ratio: float):
+        # filter uncertain bad detections
+        raw_dets = raw_dets[raw_dets[:, 4] >= 0.95]
+
+        # rescale bbox and kpts w.r.t original image
+        raw_dets[:, :4] /= rescale_ratio
+        raw_dets[:, 6::3] /= rescale_ratio
+        raw_dets[:, 7::3] /= rescale_ratio
+
+        # kpts in format "kpC", "kpL", "kpL", "ax1", "ax2" and each kpt gets (x, y, conf)
+        return raw_dets[:, :4], raw_dets[:, 4], raw_dets[:, 6:]
+
+    def process_imgs(self, rgb_msg: CompressedImage, depth_msg: Image):
+        rgb_img = br.compressed_imgmsg_to_cv2(rgb_msg)
+        depth_img = br.imgmsg_to_cv2(depth_msg)
+
+        height, width = depth_img.shape
+
+        rgb_img = rgb_img[:, :, :3]  # cut out the alpha channel (bgra8 -> bgr8)
+
+        assert (
+            rgb_img.shape[0] == depth_img.shape[0]
+            and rgb_img.shape[1] == depth_img.shape[1]
+        ), f"Invalid image shape rgb: {rgb_img.shape} d: {depth_img.shape}"
 
         start_time = time.perf_counter()
-        img, ratio = preprocess(origin_img, (384, 672))
+        img, ratio = preprocess_rgb(rgb_img, (384, 672))
 
-        print(f"preproc: {round((time.perf_counter() - start_time) * 1000, 3)} ms")
+        print(f"preproc:\t{round((time.perf_counter() - start_time) * 1000, 3)} ms")
 
         # pass image through model
         ort_inputs = {self.session.get_inputs()[0].name: img[None, :, :, :]}
         output = self.session.run(None, ort_inputs)
 
         print(
-            f"preproc + inf: {round((time.perf_counter() - start_time) * 1000, 3)} ms"
+            f"preproc + inf:\t{round((time.perf_counter() - start_time) * 1000, 3)} ms"
         )
 
-        dets = output[0]
+        bboxes, conf, kpts = self.get_detections(output[0], ratio)
+        # print(kpts)
 
-        dets = dets[dets[:, 4] >= 0.95]
+        kpC = np.round(kpts[:, 0:2])
 
-        # rescale bbox and kpts
-        dets[:, :4] /= ratio
-        dets[:, 6::3] /= ratio
-        dets[:, 7::3] /= ratio
+        # discard all coords with invalid indices
+        kpC = kpC[(kpC[:, 0] >= 0) & (kpC[:, 1] >= 0)]
+        kpC = kpC[(kpC[:, 0] < width) & (kpC[:, 1] < height)]
 
-        if dets is not None:
-            for det in dets:
-                # plot the bounding box
-                p1 = (int(det[0]), int(det[1]))
-                p2 = (int(det[2]), int(det[3]))
-                cv2.rectangle(origin_img, p1, p2, (255, 251, 43), 1)
+        # fetch depth data with kpts
+        Z = depth_img[kpC[:, 1].astype(int), kpC[:, 0].astype(int)]
 
-                # plot the x and y keypoints with sufficient confidence score
-                for x, y, conf, label in zip(
-                    det[6::3],
-                    det[7::3],
-                    det[8::3],
-                    ["kpC", "kpL", "kpL", "ax1", "ax2"],
-                ):
-                    cv2.circle(
-                        origin_img,
-                        (int(x), int(y)),
-                        radius=2,
-                        color=(52, 64, 235),
-                        thickness=-1,
-                    )
-                    cv2.putText(
-                        origin_img,
-                        label,
-                        (int(x), int(y) + 5),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.1,
-                        (255, 255, 255),
-                        1,
-                    )
-        cv2.imshow("orig", origin_img)
-        cv2.waitKey(2)
+        print(Z.transpose())
+
+        # Z =
+        # assert False
+        # https://docs.opencv.org/4.5.5/pinhole_camera_model.png
+        # https://support.stereolabs.com/hc/en-us/articles/4554115218711-How-can-I-convert-3D-world-coordinates-to-2D-image-coordinates-and-viceversa
 
 
 if __name__ == "__main__":
 
     rospy.init_node("treedet_inference", anonymous=True)
-    rcs = RateControlledSubscriber()
+    rcs = CameraSubscriber()
     rospy.spin()
