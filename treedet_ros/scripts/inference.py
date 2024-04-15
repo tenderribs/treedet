@@ -51,7 +51,7 @@ class RateControlledSubscriber:
         )
 
         # Timer to process messages at a desired frequency (e.g., 1 Hz)
-        self.timer = rospy.Timer(rospy.Duration(1 / 10), self.timer_callback)
+        self.timer = rospy.Timer(rospy.Duration(1 / 15), self.timer_callback)
 
         package_path = rospkg.RosPack().get_path("treedet_ros")
         model_path = os.path.join(package_path, "model.onnx")
@@ -87,6 +87,8 @@ class RateControlledSubscriber:
 
         dets = output[0]
 
+        dets = dets[dets[:, 4] >= 0.9]
+
         # rescale bbox and kpts
         dets[:, :4] /= ratio
         dets[:, 6::3] /= ratio
@@ -97,7 +99,7 @@ class RateControlledSubscriber:
                 # plot the bounding box
                 p1 = (int(det[0]), int(det[1]))
                 p2 = (int(det[2]), int(det[3]))
-                cv2.rectangle(img, p1, p2, (255, 251, 43), 1)
+                cv2.rectangle(origin_img, p1, p2, (255, 251, 43), 1)
 
                 # plot the x and y keypoints with sufficient confidence score
                 for x, y, conf, label in zip(
