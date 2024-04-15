@@ -9,26 +9,27 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 
+
 class Exp(MyExp):
     def __init__(self):
         super(Exp, self).__init__()
-        self.device_type = 'cuda'
+        self.device_type = "cuda"
 
         # ---------------- model config ---------------- #
         self.depth = 1
         self.width = 1
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
-        self.num_classes = 1 # just trees
+        self.num_classes = 1  # just trees
         self.num_kpts = 5
-        self.default_sigmas = False # refers the the sigmas used in OKS formula
-        self.input_size = (384, 672)    # (height, width)
+        self.default_sigmas = False  # refers the the sigmas used in OKS formula
+        self.input_size = (384, 672)  # (height, width)
         self.act = "relu"
         # ---------------- dataloader config ---------------- #
         self.data_subdir = "SynthTree43k"
         self.train_ann = "trees_train.json"
         self.test_ann = "trees_test.json"
         self.val_ann = "trees_val.json"
-        self.mean_bgr = None # gets injected by train.py at runtime
+        self.mean_bgr = None  # gets injected by train.py at runtime
         self.std_bgr = None  # dito
         # --------------- transform config ----------------- #
         self.mosaic_prob = 0.0
@@ -47,12 +48,13 @@ class Exp(MyExp):
         self.max_epoch = 100
         self.eval_interval = 5
         # self.print_interval = 25
-        self.basic_lr_per_img = 0.02 / 64 # batch size 32
+        self.basic_lr_per_img = 0.02 / 64  # batch size 32
         # -----------------  testing config ------------------ #
         self.human_pose = True
-        self.visualize = False #True
+        self.visualize = False  # True
         self.od_weights = None
         self.test_size = self.input_size
+
     def get_model(self):
         from yolox.models import YOLOX, YOLOPAFPN, YOLOXHeadKPTS
 
@@ -64,8 +66,22 @@ class Exp(MyExp):
 
         if getattr(self, "model", None) is None:
             in_channels = [256, 512, 1024]
-            backbone = YOLOPAFPN(self.depth, self.width, in_channels=in_channels, act=self.act, conv_focus=True, split_max_pool_kernel=True)
-            head = YOLOXHeadKPTS(self.num_classes, self.width, in_channels=in_channels, act=self.act, default_sigmas=self.default_sigmas, num_kpts=self.num_kpts)
+            backbone = YOLOPAFPN(
+                self.depth,
+                self.width,
+                in_channels=in_channels,
+                act=self.act,
+                conv_focus=True,
+                split_max_pool_kernel=True,
+            )
+            head = YOLOXHeadKPTS(
+                self.num_classes,
+                self.width,
+                in_channels=in_channels,
+                act=self.act,
+                default_sigmas=self.default_sigmas,
+                num_kpts=self.num_kpts,
+            )
 
             # make sure that this is injected by the external script
             assert self.mean_bgr is not None and self.std_bgr is not None
@@ -75,9 +91,7 @@ class Exp(MyExp):
         self.model.head.initialize_biases(1e-2)
         return self.model
 
-    def get_data_loader(
-        self, batch_size, is_distributed, no_aug=False, cache_img=False
-    ):
+    def get_data_loader(self, batch_size, is_distributed, no_aug=False, cache_img=False):
         from yolox.data import (
             TREEKPTSDataset,
             TrainTransform,
@@ -103,10 +117,10 @@ class Exp(MyExp):
                     max_labels=50,
                     flip_prob=self.flip_prob,
                     hsv_prob=self.hsv_prob,
-                    num_kpts=self.num_kpts),
+                    num_kpts=self.num_kpts,
+                ),
                 cache=cache_img,
             )
-
 
         dataset = MosaicDetection(
             dataset,
@@ -144,7 +158,10 @@ class Exp(MyExp):
             mosaic=not no_aug,
         )
 
-        dataloader_kwargs = {"num_workers": self.data_num_workers, "pin_memory": True}
+        dataloader_kwargs = {
+            "num_workers": self.data_num_workers,
+            "pin_memory": True,
+        }
         dataloader_kwargs["batch_sampler"] = batch_sampler
 
         # Make sure each process has different random seed, especially for 'fork' method.
@@ -168,9 +185,7 @@ class Exp(MyExp):
 
         if is_distributed:
             batch_size = batch_size // dist.get_world_size()
-            sampler = torch.utils.data.distributed.DistributedSampler(
-                valdataset, shuffle=False
-            )
+            sampler = torch.utils.data.distributed.DistributedSampler(valdataset, shuffle=False)
         else:
             sampler = torch.utils.data.SequentialSampler(valdataset)
 
@@ -188,13 +203,12 @@ class Exp(MyExp):
         from yolox.evaluators import TreeKptsEvaluator
 
         val_loader = self.get_eval_loader(batch_size, is_distributed, testdev, legacy)
-        output_dir = os.path.join(self.output_dir, self.exp_name)
         evaluator = TreeKptsEvaluator(
             dataloader=val_loader,
             img_size=self.test_size,
             num_classes=self.num_classes,
             num_kpts=self.num_kpts,
             default_sigmas=self.default_sigmas,
-            device_type=self.device_type
+            device_type=self.device_type,
         )
         return evaluator

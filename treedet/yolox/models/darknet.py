@@ -4,7 +4,14 @@
 
 from torch import nn
 
-from .network_blocks import BaseConv, CSPLayer, DWConv, Focus, ResLayer, SPPBottleneck
+from .network_blocks import (
+    BaseConv,
+    CSPLayer,
+    DWConv,
+    Focus,
+    ResLayer,
+    SPPBottleneck,
+)
 
 
 class Darknet(nn.Module):
@@ -38,17 +45,11 @@ class Darknet(nn.Module):
         num_blocks = Darknet.depth2blocks[depth]
         # create darknet with `stem_out_channels` and `num_blocks` layers.
         # to make model structure more clear, we don't use `for` statement in python.
-        self.dark2 = nn.Sequential(
-            *self.make_group_layer(in_channels, num_blocks[0], stride=2)
-        )
+        self.dark2 = nn.Sequential(*self.make_group_layer(in_channels, num_blocks[0], stride=2))
         in_channels *= 2  # 128
-        self.dark3 = nn.Sequential(
-            *self.make_group_layer(in_channels, num_blocks[1], stride=2)
-        )
+        self.dark3 = nn.Sequential(*self.make_group_layer(in_channels, num_blocks[1], stride=2))
         in_channels *= 2  # 256
-        self.dark4 = nn.Sequential(
-            *self.make_group_layer(in_channels, num_blocks[2], stride=2)
-        )
+        self.dark4 = nn.Sequential(*self.make_group_layer(in_channels, num_blocks[2], stride=2))
         in_channels *= 2  # 512
 
         self.dark5 = nn.Sequential(
@@ -59,7 +60,13 @@ class Darknet(nn.Module):
     def make_group_layer(self, in_channels: int, num_blocks: int, stride: int = 1):
         "starts with conv layer then has `num_blocks` `ResLayer`"
         return [
-            BaseConv(in_channels, in_channels * 2, ksize=3, stride=stride, act="lrelu"),
+            BaseConv(
+                in_channels,
+                in_channels * 2,
+                ksize=3,
+                stride=stride,
+                act="lrelu",
+            ),
             *[(ResLayer(in_channels * 2)) for _ in range(num_blocks)],
         ]
 
@@ -117,9 +124,10 @@ class CSPDarknet(nn.Module):
         if not conv_focus:
             self.stem = Focus(3, base_channels, ksize=3, act=act)
         else:
-            self.stem =  nn.Sequential(
-                BaseConv(3, 12 , 3, 2, act=act),
-                BaseConv(12, base_channels, 3, 1, act=act))
+            self.stem = nn.Sequential(
+                BaseConv(3, 12, 3, 2, act=act),
+                BaseConv(12, base_channels, 3, 1, act=act),
+            )
 
         # dark2
         self.dark2 = nn.Sequential(
@@ -160,7 +168,12 @@ class CSPDarknet(nn.Module):
         # dark5
         self.dark5 = nn.Sequential(
             Conv(base_channels * 8, base_channels * 16, 3, 2, act=act),
-            SPPBottleneck(base_channels * 16, base_channels * 16, activation=act, split_max_pool_kernel=split_max_pool_kernel),
+            SPPBottleneck(
+                base_channels * 16,
+                base_channels * 16,
+                activation=act,
+                split_max_pool_kernel=split_max_pool_kernel,
+            ),
             CSPLayer(
                 base_channels * 16,
                 base_channels * 16,

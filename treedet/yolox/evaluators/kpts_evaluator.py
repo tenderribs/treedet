@@ -10,8 +10,6 @@ import tempfile
 import time
 from loguru import logger
 from tqdm import tqdm
-import cv2
-import os
 import numpy as np
 
 import torch
@@ -19,10 +17,9 @@ import torch
 from yolox.utils import (
     gather,
     is_main_process,
-    postprocess,
     synchronize,
     time_synchronized,
-    xyxy2xywh
+    xyxy2xywh,
 )
 
 
@@ -33,7 +30,13 @@ class TreeKptsEvaluator:
     """
 
     def __init__(
-        self, dataloader, img_size, num_classes, num_kpts=5, default_sigmas=None, device_type=None
+        self,
+        dataloader,
+        img_size,
+        num_classes,
+        num_kpts=5,
+        default_sigmas=None,
+        device_type=None,
     ):
         """
         Args:
@@ -47,7 +50,8 @@ class TreeKptsEvaluator:
         self.default_sigmas = default_sigmas
         self.device_type = device_type
 
-        if default_sigmas is None: raise RuntimeError("default_sigmas must not be None")
+        if default_sigmas is None:
+            raise RuntimeError("default_sigmas must not be None")
 
     def evaluate(
         self,
@@ -72,11 +76,18 @@ class TreeKptsEvaluator:
             ap50 (float) : COCO AP of IoU=50
             summary (sr): summary info of evaluation.
         """
-        tensor_type = torch.FloatTensor if self.device_type == "cpu" else (torch.cuda.HalfTensor if half else torch.cuda.FloatTensor)
-        tensor_type_float = torch.FloatTensor if self.device_type == "cpu" else torch.cuda.FloatTensor
+        tensor_type = (
+            torch.FloatTensor
+            if self.device_type == "cpu"
+            else (torch.cuda.HalfTensor if half else torch.cuda.FloatTensor)
+        )
+        tensor_type_float = (
+            torch.FloatTensor if self.device_type == "cpu" else torch.cuda.FloatTensor
+        )
 
         model = model.eval()
-        if half: model = model.half()
+        if half:
+            model = model.half()
 
         ids = []
         data_list = []
@@ -95,9 +106,7 @@ class TreeKptsEvaluator:
             model(x)
             model = model_trt
 
-        for cur_iter, (imgs, _, info_imgs, ids) in enumerate(
-            progress_bar(self.dataloader)
-        ):
+        for cur_iter, (imgs, _, info_imgs, ids) in enumerate(progress_bar(self.dataloader)):
             with torch.no_grad():
                 imgs = imgs.type(tensor_type)
 
@@ -127,9 +136,7 @@ class TreeKptsEvaluator:
 
     def convert_to_coco_format(self, outputs, info_imgs, ids):
         data_list = []
-        for (output, img_h, img_w, img_id) in zip(
-            outputs, info_imgs[0], info_imgs[1], ids
-        ):
+        for output, img_h, img_w, img_id in zip(outputs, info_imgs[0], info_imgs[1], ids):
             if output is None:
                 continue
             output = output.cpu()
@@ -158,7 +165,7 @@ class TreeKptsEvaluator:
                     "bbox": bboxes[ind].numpy().tolist(),
                     "score": scores[ind].numpy().item(),
                     "segmentation": [],
-                    'keypoints': keypoints[ind].numpy().tolist(),
+                    "keypoints": keypoints[ind].numpy().tolist(),
                 }  # COCO json format
                 data_list.append(pred_data)
         return data_list
@@ -197,7 +204,7 @@ class TreeKptsEvaluator:
 
             cocoEval = COCOeval(cocoGt, cocoDt, annType[2])
             if self.default_sigmas is False:
-                cocoEval.params.kpt_oks_sigmas = np.array([0.89]*self.num_kpts)/10.0
+                cocoEval.params.kpt_oks_sigmas = np.array([0.89] * self.num_kpts) / 10.0
             cocoEval.evaluate()
             cocoEval.accumulate()
             redirect_string = io.StringIO()

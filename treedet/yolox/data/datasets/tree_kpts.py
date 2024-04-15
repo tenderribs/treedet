@@ -29,7 +29,7 @@ class TREEKPTSDataset(Dataset):
         preproc=None,
         cache=False,
         num_kpts=5,
-        default_flip_index=True
+        default_flip_index=True,
     ):
         """
         COCO dataset initialization. Annotation data are read into memory by COCO API.
@@ -64,7 +64,7 @@ class TREEKPTSDataset(Dataset):
         # when you horizontally flip the image, the keypoint labels need to be modified
         # in our format we have keypoint_names=["kpC", "kpL", "kpR", "AX1", "AX2"])
         # kpL and kpR delimit the left and right sides of the tree, so we need to flip idx
-        self.flip_index = [0,2,1,3,4]
+        self.flip_index = [0, 2, 1, 3, 4]
         if cache:
             self._cache_images()
 
@@ -75,9 +75,14 @@ class TREEKPTSDataset(Dataset):
         del self.imgs
 
     def _load_coco_annotations(self):
-        annotations = [self.load_anno_from_ids(_ids) for _ids in self.ids if self.load_anno_from_ids(_ids) is not None]
-        ids = [ _ids for _ids in self.ids if self.load_anno_from_ids(_ids) is not None]
+        annotations = [
+            self.load_anno_from_ids(_ids)
+            for _ids in self.ids
+            if self.load_anno_from_ids(_ids) is not None
+        ]
+        ids = [_ids for _ids in self.ids if self.load_anno_from_ids(_ids) is not None]
         return annotations, ids
+
     def _cache_images(self):
         logger.warning(
             "\n********************************************************************************\n"
@@ -112,9 +117,7 @@ class TREEKPTSDataset(Dataset):
             self.imgs.flush()
             pbar.close()
         else:
-            logger.warning(
-                "You are using cached imgs! Make sure your dataset is not changed!!"
-            )
+            logger.warning("You are using cached imgs! Make sure your dataset is not changed!!")
 
         logger.info("Loading cached imgs...")
         self.imgs = np.memmap(
@@ -138,20 +141,20 @@ class TREEKPTSDataset(Dataset):
             # convert from [xywh] to [xyxy] notation
             x2 = np.min((width, x1 + np.max((0, obj["bbox"][2]))))
             y2 = np.min((height, y1 + np.max((0, obj["bbox"][3]))))
-            if obj["area"] > 0 and x2 >= x1 and y2 >= y1 and obj['num_keypoints']>0:
+            if obj["area"] > 0 and x2 >= x1 and y2 >= y1 and obj["num_keypoints"] > 0:
                 obj["clean_bbox"] = [x1, y1, x2, y2]
-                obj["clean_kpts"] =  obj['keypoints']
+                obj["clean_kpts"] = obj["keypoints"]
                 objs.append(obj)
         num_objs = len(objs)
-        if num_objs==0:
+        if num_objs == 0:
             return
 
-        res = np.zeros((num_objs, 5+2*self.num_kpts))
+        res = np.zeros((num_objs, 5 + 2 * self.num_kpts))
 
         for ix, obj in enumerate(objs):
             cls = self.class_ids.index(obj["category_id"])
-            res[ix, 0:4] = obj["clean_bbox"] # put bbox data in res
-            res[ix, 4] = cls                 # put the class ID in res
+            res[ix, 0:4] = obj["clean_bbox"]  # put bbox data in res
+            res[ix, 4] = cls  # put the class ID in res
             res[ix, 5::2] = obj["clean_kpts"][0::3]
             res[ix, 6::2] = obj["clean_kpts"][1::3]
 
@@ -163,11 +166,7 @@ class TREEKPTSDataset(Dataset):
         img_info = (height, width)
         resized_info = (int(height * r), int(width * r))
 
-        file_name = (
-            im_ann["file_name"]
-            if "file_name" in im_ann
-            else "{:012}".format(id_) + ".jpg"
-        )
+        file_name = im_ann["file_name"] if "file_name" in im_ann else "{:012}".format(id_) + ".jpg"
 
         # res contains the ground truth info for each object in the image in a matrix
         return (res, img_info, resized_info, file_name)
@@ -199,7 +198,7 @@ class TREEKPTSDataset(Dataset):
         assert img is not None
 
         # normalize image w.r.t entire dataset
-        if (self.std_bgr is not None and self.mean_bgr is not None):
+        if self.std_bgr is not None and self.mean_bgr is not None:
             img = img.astype(np.float32)
             return (img - self.mean_bgr) / self.std_bgr
 

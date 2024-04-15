@@ -3,7 +3,6 @@
 # Copyright (c) Megvii, Inc. and its affiliates.
 
 import argparse
-import os
 from loguru import logger
 
 import torch
@@ -12,41 +11,50 @@ from torch import nn
 from yolox.exp import get_exp
 from yolox.models.network_blocks import SiLU
 from yolox.utils import replace_module
-from yolox.data.data_augment import preproc as preprocess
 
 from config import model_sizes, datasets
 
-import cv2
 
 _SUPPORTED_DATASETS = ["tree_kpts"]
 _NUM_CLASSES = {"tree_kpts": 1}
 
+
 def make_parser():
     parser = argparse.ArgumentParser("YOLOX onnx deploy")
     parser.add_argument(
-        "--output-name", type=str, default="yolox.onnx", required=True, help="output name of models"
+        "--output-name",
+        type=str,
+        default="yolox.onnx",
+        required=True,
+        help="output name of models",
     )
     parser.add_argument(
-        "--input", default="images", type=str, help="input node name of onnx model"
+        "--input",
+        default="images",
+        type=str,
+        help="input node name of onnx model",
     )
     parser.add_argument(
-        "--output", default="detections", type=str, help="output node name of onnx model"
+        "--output",
+        default="detections",
+        type=str,
+        help="output node name of onnx model",
     )
-    parser.add_argument(
-        "-o", "--opset", default=16, type=int, help="onnx opset version"
-    )
+    parser.add_argument("-o", "--opset", default=16, type=int, help="onnx opset version")
     parser.add_argument("--batch-size", type=int, default=1, help="batch size")
     parser.add_argument(
-        "--dynamic", action="store_true", help="whether the input shape should be dynamic or not"
+        "--dynamic",
+        action="store_true",
+        help="whether the input shape should be dynamic or not",
     )
     parser.add_argument("--no-onnxsim", action="store_true", help="use onnxsim or not")
     parser.add_argument(
         "-ms",
         "--model-size",
-        choices=['s', 'm', 'l'],
+        choices=["s", "m", "l"],
         required=True,
         type=str,
-        help="Model Size (s, m, l)"
+        help="Model Size (s, m, l)",
     )
     parser.add_argument(
         "-f",
@@ -60,7 +68,14 @@ def make_parser():
     parser.add_argument("--task", default=None, type=str, help="type of task for model eval")
     parser.add_argument("-n", "--name", type=str, default=None, help="model name")
     parser.add_argument("-c", "--ckpt", default=None, type=str, help="ckpt path")
-    parser.add_argument("--dataset", default=None, type=str, help="dataset for training", choices=list(datasets.keys()), required=True)
+    parser.add_argument(
+        "--dataset",
+        default=None,
+        type=str,
+        help="dataset for training",
+        choices=list(datasets.keys()),
+        required=True,
+    )
     return parser
 
 
@@ -73,8 +88,8 @@ def main(exp=None):
     exp.depth, exp.width = model_sizes[args.model_size]
     exp.exp_name = f"yolox_{args.model_size}_tree_pose"
     ds = datasets[args.dataset]
-    exp.mean_bgr = ds['mean_bgr']
-    exp.std_bgr = ds['std_bgr']
+    exp.mean_bgr = ds["mean_bgr"]
+    exp.std_bgr = ds["std_bgr"]
 
     if not args.experiment_name:
         args.experiment_name = exp.exp_name
@@ -88,7 +103,7 @@ def main(exp=None):
         ckpt = ckpt["model"]
     model.load_state_dict(ckpt)
     model = replace_module(model, nn.SiLU, SiLU)
-    model.head.decode_in_inference = True # default decode in inference
+    model.head.decode_in_inference = True  # default decode in inference
 
     logger.info("loading checkpoint done.")
     dummy_input = torch.randn(args.batch_size, 3, exp.test_size[0], exp.test_size[1])
@@ -99,8 +114,9 @@ def main(exp=None):
         args.output_name,
         input_names=[args.input],
         output_names=[args.output],
-        dynamic_axes={args.input: {0: 'batch'},
-                        args.output: {0: 'batch'}} if args.dynamic else None,
+        dynamic_axes=(
+            {args.input: {0: "batch"}, args.output: {0: "batch"}} if args.dynamic else None
+        ),
         opset_version=args.opset,
     )
     logger.info("generated onnx model named {}".format(args.output_name))
@@ -115,6 +131,7 @@ def main(exp=None):
         assert check, "Simplified ONNX model could not be validated"
         onnx.save(model_simp, args.output_name)
         logger.info("generated simplified onnx model named {}".format(args.output_name))
+
 
 if __name__ == "__main__":
     main()

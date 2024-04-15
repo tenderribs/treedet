@@ -2,11 +2,11 @@
 # -*- coding:utf-8 -*-
 # Copyright (c) Megvii, Inc. and its affiliates.
 
-import datetime
 import os
 import time
 from loguru import logger
 import wandb
+
 # from torch.profiler import profile, record_function, ProfilerActivity
 
 
@@ -23,7 +23,6 @@ from yolox.utils import (
     get_model_info,
     get_rank,
     get_world_size,
-    gpu_mem_usage,
     is_parallel,
     load_ckpt,
     occupy_mem,
@@ -47,7 +46,11 @@ class Trainer:
         self.is_distributed = get_world_size() > 1
         self.rank = get_rank()
         self.local_rank = get_local_rank()
-        self.device = (exp.device_type if exp.device_type == "cpu" else "{}:{}".format(exp.device_type, self.local_rank))
+        self.device = (
+            exp.device_type
+            if exp.device_type == "cpu"
+            else "{}:{}".format(exp.device_type, self.local_rank)
+        )
         self.use_model_ema = exp.ema
         self.state_dict_object_detect = None
 
@@ -139,9 +142,7 @@ class Trainer:
             torch.cuda.set_device(self.local_rank)
         #
         model = self.exp.get_model()
-        logger.info(
-            "Model Summary: {}".format(get_model_info(model, self.exp.test_size))
-        )
+        logger.info("Model Summary: {}".format(get_model_info(model, self.exp.test_size)))
         model.to(self.device)
 
         # solver related init
@@ -159,7 +160,11 @@ class Trainer:
             cache_img=self.args.cache,
         )
         logger.info("init prefetcher, this might take one minute or less...")
-        self.prefetcher = DataPrefetcherCPU(self.train_loader) if self.exp.device_type == "cpu" else DataPrefetcher(self.train_loader)
+        self.prefetcher = (
+            DataPrefetcherCPU(self.train_loader)
+            if self.exp.device_type == "cpu"
+            else DataPrefetcher(self.train_loader)
+        )
         # max_iter means iters per epoch
         self.max_iter = len(self.train_loader)
 
@@ -189,11 +194,9 @@ class Trainer:
         logger.info("Training start...")
         logger.info("\n{}".format(model))
 
-
         wandb.init(
             # set the wandb project where this run will be logged
             project="tree-det",
-
             # track hyperparameters and run metadata
             config={
                 "exp_name": self.exp.exp_name,
@@ -204,7 +207,7 @@ class Trainer:
                 "width": self.exp.width,
                 "data_set": self.exp.data_set,
                 "input_size": self.exp.input_size,
-            }
+            },
         )
 
     def after_train(self):
@@ -247,18 +250,14 @@ class Trainer:
         """
         # log needed information
         if (self.iter + 1) % self.exp.print_interval == 0:
-            # TODO check ETA logic
-            left_iters = self.max_iter * self.max_epoch - (self.progress_in_iter + 1)
-
             loss_meter = self.meter.get_filtered_meter("loss")
-            logger.info(f"epoch: {self.epoch + 1}/{self.max_epoch}, iters: {self.iter + 1}/{self.max_iter}")
+            logger.info(
+                f"epoch: {self.epoch + 1}/{self.max_epoch}, iters: {self.iter + 1}/{self.max_iter}"
+            )
 
             # log metrics to wandb
-            loss_dict = {k: v.latest for k, v in loss_meter.items() if 'loss' in k}
-            wandb.log({
-                "lr": self.meter["lr"].avg,
-                **loss_dict
-            })
+            loss_dict = {k: v.latest for k, v in loss_meter.items() if "loss" in k}
+            wandb.log({"lr": self.meter["lr"].avg, **loss_dict})
 
             self.meter.clear_meters()
 
@@ -286,9 +285,7 @@ class Trainer:
             )
             self.start_epoch = start_epoch
             logger.info(
-                "loaded checkpoint '{}' (epoch {})".format(
-                    self.args.resume, self.start_epoch
-                )
+                "loaded checkpoint '{}' (epoch {})".format(self.args.resume, self.start_epoch)
             )  # noqa
         else:
             if self.args.ckpt is not None:
@@ -308,18 +305,18 @@ class Trainer:
             if is_parallel(evalmodel):
                 evalmodel = evalmodel.module
 
-        ap50_95, ap50, summary = self.exp.eval(
-            evalmodel, self.evaluator, self.is_distributed
-        )
+        ap50_95, ap50, summary = self.exp.eval(evalmodel, self.evaluator, self.is_distributed)
         self.model.train()
 
         if self.rank == 0:
             self.tblogger.add_scalar("val/COCOAP50", ap50, self.epoch + 1)
             self.tblogger.add_scalar("val/COCOAP50_95", ap50_95, self.epoch + 1)
-            wandb.log({
-                "AP50": ap50,
-                "AP50_95": ap50_95,
-            })
+            wandb.log(
+                {
+                    "AP50": ap50,
+                    "AP50_95": ap50_95,
+                }
+            )
             logger.info("\n" + summary)
         synchronize()
 

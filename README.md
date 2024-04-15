@@ -1,7 +1,10 @@
 # Treedet
 This repository is based on [edgeai-yolox](https://github.com/TexasInstruments/edgeai-yolox) and contains a  of the YOLOX repository for supporting additional tasks and embedded friendly ti_lite models.
 
-The computer vision model is to be found in `treedet`. The ROS package wrapper is located in `treedet_ros`.
+
+## ROS Node
+
+The ROS package wrapper is located in `treedet_ros` while the development code for the computer vision model is in `treedet`.
 
 ## Datasets
 

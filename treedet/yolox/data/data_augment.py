@@ -19,7 +19,11 @@ from yolox.utils import xyxy2cxcywh
 
 
 def augment_hsv(img, hgain=5, sgain=30, vgain=30):
-    hsv_augs = np.random.uniform(-1, 1, 3) * [hgain, sgain, vgain]  # random gains
+    hsv_augs = np.random.uniform(-1, 1, 3) * [
+        hgain,
+        sgain,
+        vgain,
+    ]  # random gains
     hsv_augs *= np.random.randint(0, 2, 3)  # random selection of h, s, v
     hsv_augs = hsv_augs.astype(np.int16)
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.int16)
@@ -51,7 +55,7 @@ def get_affine_matrix(
     translate=0.1,
     scales=0.1,
     shear=10,
-    camera_matrix= None
+    camera_matrix=None,
 ):
     twidth, theight = target_size
 
@@ -99,7 +103,12 @@ def apply_affine_to_bboxes(targets, target_size, M, scale):
     corner_ys = corner_points[:, 1::2]
     new_bboxes = (
         np.concatenate(
-            (corner_xs.min(1), corner_ys.min(1), corner_xs.max(1), corner_ys.max(1))
+            (
+                corner_xs.min(1),
+                corner_ys.min(1),
+                corner_xs.max(1),
+                corner_ys.max(1),
+            )
         )
         .reshape(4, num_gts)
         .T
@@ -113,6 +122,7 @@ def apply_affine_to_bboxes(targets, target_size, M, scale):
 
     return targets
 
+
 def apply_affine_to_kpts(targets, target_size, M, scale, num_kpts=17):
     num_gts = len(targets)
     # warp corner points
@@ -120,15 +130,15 @@ def apply_affine_to_kpts(targets, target_size, M, scale, num_kpts=17):
     xy_kpts = np.ones((num_gts * num_kpts, 3))
     xy_kpts[:, :2] = targets[:, 5:].reshape(num_gts * num_kpts, 2)  # num_kpt is hardcoded to 17
     xy_kpts = xy_kpts @ M.T  # transform
-    xy_kpts = xy_kpts[:, :2].reshape(num_gts, num_kpts*2)  # perspective rescale or affine
+    xy_kpts = xy_kpts[:, :2].reshape(num_gts, num_kpts * 2)  # perspective rescale or affine
     xy_kpts[targets[:, 5:] == 0] = 0
-    x_kpts = xy_kpts[:, list(range(0, num_kpts*2, 2))]
-    y_kpts = xy_kpts[:, list(range(1, num_kpts*2, 2))]
+    x_kpts = xy_kpts[:, list(range(0, num_kpts * 2, 2))]
+    y_kpts = xy_kpts[:, list(range(1, num_kpts * 2, 2))]
 
     x_kpts[np.logical_or.reduce((x_kpts < 0, x_kpts > twidth, y_kpts < 0, y_kpts > theight))] = 0
     y_kpts[np.logical_or.reduce((x_kpts < 0, x_kpts > twidth, y_kpts < 0, y_kpts > theight))] = 0
-    xy_kpts[:, list(range(0, num_kpts*2, 2))] = x_kpts
-    xy_kpts[:, list(range(1, num_kpts*2, 2))] = y_kpts
+    xy_kpts[:, list(range(0, num_kpts * 2, 2))] = x_kpts
+    xy_kpts[:, list(range(1, num_kpts * 2, 2))] = y_kpts
 
     targets[:, 5:] = xy_kpts
 
@@ -143,18 +153,26 @@ def random_affine(
     translate=0.1,
     scales=0.1,
     shear=10,
-    num_kpts=17
+    num_kpts=17,
 ):
-    M, scale, angle = get_affine_matrix((target_size[1],target_size[0]), degrees, translate, scales, shear)
+    M, scale, angle = get_affine_matrix(
+        (target_size[1], target_size[0]), degrees, translate, scales, shear
+    )
 
-    img = cv2.warpAffine(img, M, dsize=(target_size[1],target_size[0]), borderValue=(114, 114, 114))
+    img = cv2.warpAffine(
+        img,
+        M,
+        dsize=(target_size[1], target_size[0]),
+        borderValue=(114, 114, 114),
+    )
 
     # Transform label coordinates
     if len(targets) > 0:
-        targets = apply_affine_to_bboxes(targets, (target_size[1],target_size[0]), M, scale)
+        targets = apply_affine_to_bboxes(targets, (target_size[1], target_size[0]), M, scale)
         targets = apply_affine_to_kpts(targets, target_size, M, scale, num_kpts=num_kpts)
 
     return img, targets
+
 
 def _mirror(image, boxes, prob=0.5, human_kpts=None, flip_index=None):
     _, width, _ = image.shape
@@ -164,7 +182,7 @@ def _mirror(image, boxes, prob=0.5, human_kpts=None, flip_index=None):
 
         # invert bbox cx and w w.r.t width
         boxes[:, 0::2] = width - boxes[:, 2::-2]
-        human_kpts[:, 0::2] = (width - human_kpts[:, 0::2])*(human_kpts[:, 0::2]!=0)
+        human_kpts[:, 0::2] = (width - human_kpts[:, 0::2]) * (human_kpts[:, 0::2] != 0)
 
         # semantically flip, i.e. left and right labelled need flipping
         human_kpts[:, 0::2] = human_kpts[:, 0::2][:, flip_index]
@@ -199,13 +217,20 @@ def preproc(img, input_size, swap=(2, 0, 1)):
 
 
 class TrainTransform:
-    def __init__(self, max_labels=50, flip_prob=0.5, hsv_prob=1.0, flip_index=None, num_kpts=5):
+    def __init__(
+        self,
+        max_labels=50,
+        flip_prob=0.5,
+        hsv_prob=1.0,
+        flip_index=None,
+        num_kpts=5,
+    ):
         self.max_labels = max_labels
         self.flip_prob = flip_prob
         self.hsv_prob = hsv_prob
         self.flip_index = flip_index
         self.num_kpts = num_kpts
-        self.target_size = (5+2*self.num_kpts)  # 5+ 2*17
+        self.target_size = 5 + 2 * self.num_kpts  # 5+ 2*17
 
     def __call__(self, image, targets, input_dim):
         boxes = targets[:, :4].copy()
@@ -231,7 +256,13 @@ class TrainTransform:
         if random.random() < self.hsv_prob:
             augment_hsv(image)
 
-        image_t, boxes, human_kpts = _mirror(image, boxes, self.flip_prob, human_kpts=human_kpts, flip_index=self.flip_index)
+        image_t, boxes, human_kpts = _mirror(
+            image,
+            boxes,
+            self.flip_prob,
+            human_kpts=human_kpts,
+            flip_index=self.flip_index,
+        )
 
         height, width, _ = image_t.shape
         image_t, r_ = preproc(image_t, input_dim)
@@ -260,9 +291,7 @@ class TrainTransform:
 
         # concat labels, boxes, kpts
         padded_labels = np.zeros((self.max_labels, self.target_size))
-        padded_labels[range(len(targets_t))[: self.max_labels]] = targets_t[
-            : self.max_labels
-        ]
+        padded_labels[range(len(targets_t))[: self.max_labels]] = targets_t[: self.max_labels]
         padded_labels = np.ascontiguousarray(padded_labels, dtype=np.float32)
         return image_t, padded_labels
 

@@ -62,4 +62,3 @@ class DataPrefetcherCPU:
     def next(self):
         input, target, _, data_index = next(self.loader)
         return input, target, data_index
-

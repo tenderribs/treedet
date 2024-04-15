@@ -18,12 +18,8 @@ class IOUloss(nn.Module):
 
         pred = pred.view(-1, 4)
         target = target.view(-1, 4)
-        tl = torch.max(
-            (pred[:, :2] - pred[:, 2:] / 2), (target[:, :2] - target[:, 2:] / 2)
-        )
-        br = torch.min(
-            (pred[:, :2] + pred[:, 2:] / 2), (target[:, :2] + target[:, 2:] / 2)
-        )
+        tl = torch.max((pred[:, :2] - pred[:, 2:] / 2), (target[:, :2] - target[:, 2:] / 2))
+        br = torch.min((pred[:, :2] + pred[:, 2:] / 2), (target[:, :2] + target[:, 2:] / 2))
 
         area_p = torch.prod(pred[:, 2:], 1)
         area_g = torch.prod(target[:, 2:], 1)
@@ -34,26 +30,34 @@ class IOUloss(nn.Module):
         iou = (area_i) / (area_u + 1e-16)
 
         if self.loss_type == "iou":
-            loss = 1 - iou ** 2
-        elif self.loss_type == "giou" or 'ciou':
+            loss = 1 - iou**2
+        elif self.loss_type == "giou" or "ciou":
             c_tl = torch.min(
-                (pred[:, :2] - pred[:, 2:] / 2), (target[:, :2] - target[:, 2:] / 2)
+                (pred[:, :2] - pred[:, 2:] / 2),
+                (target[:, :2] - target[:, 2:] / 2),
             )
             c_br = torch.max(
-                (pred[:, :2] + pred[:, 2:] / 2), (target[:, :2] + target[:, 2:] / 2)
+                (pred[:, :2] + pred[:, 2:] / 2),
+                (target[:, :2] + target[:, 2:] / 2),
             )
-            if self.loss_type =="giou":
+            if self.loss_type == "giou":
                 area_c = torch.prod(c_br - c_tl, 1)
                 giou = iou - (area_c - area_u) / area_c.clamp(1e-16)
                 loss = 1 - giou.clamp(min=-1.0, max=1.0)
             elif self.loss_type == "ciou":
-                c2 = torch.sum((c_tl - c_br)**2, 1) + eps # convex (smallest enclosing box) diagonal squared
-                rho2 = torch.sum((pred[:, :2] - target[:, :2])**2, 1) # center distance squared
-                v = (4 / math.pi ** 2) * torch.pow(torch.atan(target[:,2]/ (target[:,3]+eps)) - torch.atan(pred[:,2] / (pred[:,3]+eps)), 2)
+                c2 = (
+                    torch.sum((c_tl - c_br) ** 2, 1) + eps
+                )  # convex (smallest enclosing box) diagonal squared
+                rho2 = torch.sum((pred[:, :2] - target[:, :2]) ** 2, 1)  # center distance squared
+                v = (4 / math.pi**2) * torch.pow(
+                    torch.atan(target[:, 2] / (target[:, 3] + eps))
+                    - torch.atan(pred[:, 2] / (pred[:, 3] + eps)),
+                    2,
+                )
                 with torch.no_grad():
                     alpha = v / (v - iou + (1 + eps))
                 ciou = iou - (rho2 / c2 + v * alpha)  # CIoU
-                loss = 1- ciou
+                loss = 1 - ciou
         if self.reduction == "mean":
             loss = loss.mean()
         elif self.reduction == "sum":
