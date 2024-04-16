@@ -13,7 +13,7 @@ from sensor_msgs.msg import Image, CompressedImage
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
 
-# process incoming images frequency:
+# process incoming images at given frequency:
 RATE_LIMIT = 10.0
 
 
@@ -67,34 +67,52 @@ def get_detections(raw_dets: list, rescale_ratio: float):
     return raw_dets[:, :4], raw_dets[:, 4], raw_dets[:, 6:]
 
 
-def uv2xyz(uv: np.ndarray, depth_img: np.ndarray, height: int, width: int):
+def uv2xy(uv: np.ndarray, Z: np.ndarray):
+    """Project
+    https://support.stereolabs.com/hc/en-us/articles/4554115218711-How-can-I-convert-3D-world-coordinates-to-2D-image-coordinates-and-viceversa
     """
-    Convert from pixel coordinates to 3D point with depth image information
+    assert uv.shape[0] == Z.shape[0]
 
-    Resulting cartesian coordinates are consistent with the stereolabs frame:
+    X = ((uv[:, 0] - cx) * Z) / (fx)
+    Y = ((uv[:, 1] - cy) * Z) / (fy)
+    return X, Y
+
+
+def uv2xyz(uv: np.ndarray, depth_img: np.ndarray, height: int, width: int):
+    """Convert from pixel coordinates to 3D point with depth image information
+
+    Resulting cartesian coordinates are consistent with the stereolabs frame of ref:
     - https://docs.opencv.org/4.5.5/pinhole_camera_model.png
     - https://www.stereolabs.com/docs/positional-tracking/coordinate-frames#selecting-a-coordinate-system
     """
-    # discard all coords with invalid indices
     positive = (uv[:, 0] >= 0) & (uv[:, 1] >= 0)
     in_bounds = (uv[:, 0] < width) & (uv[:, 1] < height)
 
+    # discard all coords with invalid indices
     uv = uv[positive & in_bounds]
 
     # fetch depth data in meters
-    Z = depth_img[uv[:, 1].astype(int), uv[:, 0].astype(int)]
+    Z = depth_img[
+        uv[:, 1].astype(int),
+        uv[:, 0].astype(int),
+    ]
+    valid_depth = ~(np.isnan(Z) | np.isinf(Z))
+    Z = Z[valid_depth]
 
-    valid_z = ~(np.isnan(Z) | np.isinf(Z))
+    X, Y = uv2xy(uv[valid_depth], Z)
 
-    # https://support.stereolabs.com/hc/en-us/articles/4554115218711-How-can-I-convert-3D-world-coordinates-to-2D-image-coordinates-and-viceversa
-    Z = Z[valid_z]
-    X = ((uv[:, 0][valid_z] - cx) * Z) / (fx)
-    Y = ((uv[:, 1][valid_z] - cy) * Z) / (fy)
-
-    return np.column_stack((X, Y, Z))
+    # , positive & in_bounds & valid_z
+    return np.column_stack((X, Y, Z)), positive & in_bounds, valid_depth
 
 
-def pub_point(XYZ: np.ndarray):
+def uv2roll(uv1: np.ndarray, uv2: np.ndarray) -> np.ndarray:
+    du = uv1[:, 0] - uv2[:, 0]
+    dv = uv1[:, 1] - uv2[:, 1]
+
+    print(np.arctan2(dv, du) + np.pi / 2)
+
+
+def pc2_msg(XYZ: np.ndarray) -> PointCloud2:
     header = rospy.Header(
         frame_id="zed2i_left_camera_optical_frame", stamp=rospy.Time.now()
     )
@@ -105,8 +123,7 @@ def pub_point(XYZ: np.ndarray):
     ]
     points = [tuple(point) for point in XYZ]
 
-    pc2_msg = point_cloud2.create_cloud(header, fields, points)
-    point_pub.publish(pc2_msg)
+    return point_cloud2.create_cloud(header, fields, points)
 
 
 class CameraSubscriber:
@@ -182,10 +199,32 @@ class CameraSubscriber:
 
         bboxes, conf, kpts = get_detections(output[0], ratio)
 
-        uv = np.round(kpts[:, 0:2])
-        XYZ = uv2xyz(uv, depth_img, height, width)
+        cut_uv = np.round(kpts[:, 0:2])
 
-        pub_point(XYZ)
+        # convert felling cut pixel coords to 3D
+        cut_XYZ, uv_mask, depth_mask = uv2xyz(cut_uv, depth_img, height, width)
+
+        # # only calculate angle and diameter for kpts that were detected in depth camera
+        l_uv = np.round(kpts[:, 3:5])[uv_mask][depth_mask]
+        r_uv = np.round(kpts[:, 6:8])[uv_mask][depth_mask]
+
+        # # Reuse the z from the felling cut in trunk center because sometimes depth measurement is more reliable.
+        # # Sometimes treedet misses the trunk and then the Z value is in the background, so possibly np.inf or np.nan.
+        # # That makes it impossible to use uv2xyz. Instead we project uv onto Z=Z_c plane of the felling cut.
+        z_of_cut = cut_XYZ[:, 2]
+
+        assert l_uv.shape == r_uv.shape and r_uv.shape[0] == z_of_cut.shape[0]
+
+        Xl, Yl = uv2xy(l_uv, z_of_cut)
+        Xr, Yr = uv2xy(r_uv, z_of_cut)
+
+        diam = np.sqrt((Xr - Xl) ** 2 + (Yr - Yl) ** 2)
+        print(diam)
+
+        # ax1_uv = np.round(kpts[:, 9:11])
+        # roll = uv2roll(ax1_uv[mask], cut_uv[mask])
+
+        point_pub.publish(pc2_msg(cut_XYZ))
 
 
 if __name__ == "__main__":
