@@ -12,6 +12,13 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CompressedImage
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
+from geometry_msgs.msg import Point, Quaternion
+
+
+from visualization_msgs.msg import Marker, MarkerArray
+import tf.transformations
+
+marker = Marker()
 
 # process incoming images at given frequency:
 RATE_LIMIT = 10.0
@@ -26,6 +33,7 @@ cx = 325.617431640625
 cy = 189.09378051757812
 
 detection_pub = rospy.Publisher("/tree_det/felling_cut", PointCloud2, queue_size=10)
+marker_pub = rospy.Publisher("/tree_det/markers", MarkerArray, queue_size=10)
 
 
 def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
@@ -166,6 +174,38 @@ def pc2_msg(XYZ: np.ndarray, diam: np.ndarray, incl: np.ndarray) -> PointCloud2:
     return point_cloud2.create_cloud(header, fields, points)
 
 
+def markers(XYZ, diameters, inclinations, frame_id="zed2i_left_camera_optical_frame"):
+    marker_array = MarkerArray()
+
+    for i, (point, diameter, inclination) in enumerate(
+        zip(XYZ, diameters, inclinations)
+    ):
+        # Orientation Marker (Arrow)
+        orient_marker = Marker()
+        orient_marker.header.frame_id = frame_id
+        orient_marker.type = Marker.ARROW
+        orient_marker.action = Marker.ADD
+        orient_marker.id = i * 2
+        orient_marker.scale.x = 1  # Shaft length
+        orient_marker.scale.y = 0.1  # Head diameter
+        orient_marker.scale.z = 0.1  # Head length
+        orient_marker.color.a = 1.0
+        orient_marker.color.r = 1.0
+        orient_marker.color.g = 0.0
+        orient_marker.color.b = 0.0
+        orient_marker.pose.position.x = point[0]
+        orient_marker.pose.position.y = point[1]
+        orient_marker.pose.position.z = point[2]
+        # Convert inclination to quaternion for roll axis (Z-axis rotation)
+        quat = tf.transformations.quaternion_from_euler(
+            0, 0, -(np.pi / 2 + inclination)
+        )
+        orient_marker.pose.orientation = Quaternion(*quat)
+
+    marker_array.markers.append(orient_marker)
+    return marker_array
+
+
 class CameraSubscriber:
     def __init__(self):
         package_path = rospkg.RosPack().get_path("treedet_ros")
@@ -243,6 +283,7 @@ class CameraSubscriber:
             and cut_XYZ.shape[0] == incl_radians.shape[0]
         )
         detection_pub.publish(pc2_msg(cut_XYZ, diam, incl_radians))
+        marker_pub.publish(markers(cut_XYZ, diam, incl_radians))
 
 
 if __name__ == "__main__":
