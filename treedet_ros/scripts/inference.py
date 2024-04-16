@@ -10,6 +10,12 @@ import time
 
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CompressedImage
+from sensor_msgs.msg import PointCloud2, PointField
+from sensor_msgs import point_cloud2
+
+# process incoming images frequency:
+RATE_LIMIT = 10.0
+
 
 br = CvBridge()
 
@@ -19,8 +25,10 @@ fy = 487.29986572265625
 cx = 325.617431640625
 cy = 189.09378051757812
 
+point_pub = rospy.Publisher("/tree_det/felling_cut", PointCloud2, queue_size=10)
 
-def preprocess_rgb(img, input_size, swap=(2, 0, 1)):
+
+def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
     assert len(img.shape) == 3
 
     # initialize padded image with "neutral" color 114
@@ -41,6 +49,64 @@ def preprocess_rgb(img, input_size, swap=(2, 0, 1)):
 
     # ensure mem is contig. for performance reasons
     return np.ascontiguousarray(padded_img, dtype=np.float32), r
+
+
+def get_detections(raw_dets: list, rescale_ratio: float):
+    """
+    Get filtered detections in scaling of original rgb and depth image
+    """
+    # filter uncertain bad detections
+    raw_dets = raw_dets[raw_dets[:, 4] >= 0.95]
+
+    # rescale bbox and kpts w.r.t original image
+    raw_dets[:, :4] /= rescale_ratio
+    raw_dets[:, 6::3] /= rescale_ratio
+    raw_dets[:, 7::3] /= rescale_ratio
+
+    # kpts in format "kpC", "kpL", "kpL", "ax1", "ax2" and each kpt gets (x, y, conf)
+    return raw_dets[:, :4], raw_dets[:, 4], raw_dets[:, 6:]
+
+
+def uv2xyz(uv: np.ndarray, depth_img: np.ndarray, height: int, width: int):
+    """
+    Convert from pixel coordinates to 3D point with depth image information
+
+    Resulting cartesian coordinates are consistent with the stereolabs frame:
+    - https://docs.opencv.org/4.5.5/pinhole_camera_model.png
+    - https://www.stereolabs.com/docs/positional-tracking/coordinate-frames#selecting-a-coordinate-system
+    """
+    # discard all coords with invalid indices
+    positive = (uv[:, 0] >= 0) & (uv[:, 1] >= 0)
+    in_bounds = (uv[:, 0] < width) & (uv[:, 1] < height)
+
+    uv = uv[positive & in_bounds]
+
+    # fetch depth data in meters
+    Z = depth_img[uv[:, 1].astype(int), uv[:, 0].astype(int)]
+
+    valid_z = ~(np.isnan(Z) | np.isinf(Z))
+
+    # https://support.stereolabs.com/hc/en-us/articles/4554115218711-How-can-I-convert-3D-world-coordinates-to-2D-image-coordinates-and-viceversa
+    Z = Z[valid_z]
+    X = ((uv[:, 0][valid_z] - cx) * Z) / (fx)
+    Y = ((uv[:, 1][valid_z] - cy) * Z) / (fy)
+
+    return np.column_stack((X, Y, Z))
+
+
+def pub_point(XYZ: np.ndarray):
+    header = rospy.Header(
+        frame_id="zed2i_left_camera_optical_frame", stamp=rospy.Time.now()
+    )
+    fields = [
+        PointField("x", 0, PointField.FLOAT32, 1),
+        PointField("y", 4, PointField.FLOAT32, 1),
+        PointField("z", 8, PointField.FLOAT32, 1),
+    ]
+    points = [tuple(point) for point in XYZ]
+
+    pc2_msg = point_cloud2.create_cloud(header, fields, points)
+    point_pub.publish(pc2_msg)
 
 
 class CameraSubscriber:
@@ -66,8 +132,9 @@ class CameraSubscriber:
             Image,
             self.depth_callback,
         )
+
         # Timer to process messages at a desired frequency (e.g., 1 Hz)
-        self.timer = rospy.Timer(rospy.Duration(1 / 1), self.timer_callback)
+        self.timer = rospy.Timer(rospy.Duration(1 / RATE_LIMIT), self.timer_callback)
 
     def rgb_callback(self, comp_image: CompressedImage):
         with self.lock:
@@ -81,36 +148,24 @@ class CameraSubscriber:
         with self.lock:
             if self.data_buffer[0] and self.data_buffer[1]:
                 # Process the last message received
-                rgb = self.data_buffer[0][-1]
-                depth = self.data_buffer[1][-1]
+                rgb_msg: CompressedImage = self.data_buffer[0][-1]
+                depth_msg: Image = self.data_buffer[1][-1]
 
-                self.process_imgs(rgb, depth)
+                rgb_img: np.ndarray = br.compressed_imgmsg_to_cv2(rgb_msg)
+                depth_img: np.ndarray = br.imgmsg_to_cv2(depth_msg)
+
+                rgb_img = rgb_img[:, :, :3]  # cut out the alpha channel (bgra8 -> bgr8)
+
+                self.process_imgs(rgb_img, depth_img)
                 self.data_buffer = ([], [])
 
-    def get_detections(self, raw_dets: list, rescale_ratio: float):
-        # filter uncertain bad detections
-        raw_dets = raw_dets[raw_dets[:, 4] >= 0.95]
-
-        # rescale bbox and kpts w.r.t original image
-        raw_dets[:, :4] /= rescale_ratio
-        raw_dets[:, 6::3] /= rescale_ratio
-        raw_dets[:, 7::3] /= rescale_ratio
-
-        # kpts in format "kpC", "kpL", "kpL", "ax1", "ax2" and each kpt gets (x, y, conf)
-        return raw_dets[:, :4], raw_dets[:, 4], raw_dets[:, 6:]
-
-    def process_imgs(self, rgb_msg: CompressedImage, depth_msg: Image):
-        rgb_img = br.compressed_imgmsg_to_cv2(rgb_msg)
-        depth_img = br.imgmsg_to_cv2(depth_msg)
-
-        height, width = depth_img.shape
-
-        rgb_img = rgb_img[:, :, :3]  # cut out the alpha channel (bgra8 -> bgr8)
-
+    def process_imgs(self, rgb_img: np.ndarray, depth_img: np.ndarray):
         assert (
             rgb_img.shape[0] == depth_img.shape[0]
             and rgb_img.shape[1] == depth_img.shape[1]
         ), f"Invalid image shape rgb: {rgb_img.shape} d: {depth_img.shape}"
+
+        height, width = depth_img.shape
 
         start_time = time.perf_counter()
         img, ratio = preprocess_rgb(rgb_img, (384, 672))
@@ -125,28 +180,15 @@ class CameraSubscriber:
             f"preproc + inf:\t{round((time.perf_counter() - start_time) * 1000, 3)} ms"
         )
 
-        bboxes, conf, kpts = self.get_detections(output[0], ratio)
-        # print(kpts)
+        bboxes, conf, kpts = get_detections(output[0], ratio)
 
-        kpC = np.round(kpts[:, 0:2])
+        uv = np.round(kpts[:, 0:2])
+        XYZ = uv2xyz(uv, depth_img, height, width)
 
-        # discard all coords with invalid indices
-        kpC = kpC[(kpC[:, 0] >= 0) & (kpC[:, 1] >= 0)]
-        kpC = kpC[(kpC[:, 0] < width) & (kpC[:, 1] < height)]
-
-        # fetch depth data with kpts
-        Z = depth_img[kpC[:, 1].astype(int), kpC[:, 0].astype(int)]
-
-        print(Z.transpose())
-
-        # Z =
-        # assert False
-        # https://docs.opencv.org/4.5.5/pinhole_camera_model.png
-        # https://support.stereolabs.com/hc/en-us/articles/4554115218711-How-can-I-convert-3D-world-coordinates-to-2D-image-coordinates-and-viceversa
+        pub_point(XYZ)
 
 
 if __name__ == "__main__":
-
     rospy.init_node("treedet_inference", anonymous=True)
     rcs = CameraSubscriber()
     rospy.spin()
