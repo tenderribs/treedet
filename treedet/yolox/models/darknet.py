@@ -45,11 +45,17 @@ class Darknet(nn.Module):
         num_blocks = Darknet.depth2blocks[depth]
         # create darknet with `stem_out_channels` and `num_blocks` layers.
         # to make model structure more clear, we don't use `for` statement in python.
-        self.dark2 = nn.Sequential(*self.make_group_layer(in_channels, num_blocks[0], stride=2))
+        self.dark2 = nn.Sequential(
+            *self.make_group_layer(in_channels, num_blocks[0], stride=2)
+        )
         in_channels *= 2  # 128
-        self.dark3 = nn.Sequential(*self.make_group_layer(in_channels, num_blocks[1], stride=2))
+        self.dark3 = nn.Sequential(
+            *self.make_group_layer(in_channels, num_blocks[1], stride=2)
+        )
         in_channels *= 2  # 256
-        self.dark4 = nn.Sequential(*self.make_group_layer(in_channels, num_blocks[2], stride=2))
+        self.dark4 = nn.Sequential(
+            *self.make_group_layer(in_channels, num_blocks[2], stride=2)
+        )
         in_channels *= 2  # 512
 
         self.dark5 = nn.Sequential(
@@ -111,6 +117,7 @@ class CSPDarknet(nn.Module):
         act="silu",
         conv_focus=False,
         split_max_pool_kernel=False,
+        freeze=False,
     ):
         super().__init__()
         assert out_features, "please provide output features of Darknet"
@@ -183,6 +190,17 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
+
+        # optionally freeze first layers in order to reduce overfitting to tree-heavy images
+        if freeze:
+            print("heads up: freezing first network layers")
+            for module in [
+                self.stem,
+                self.dark2,
+                self.dark3,
+            ]:
+                for param in module.parameters():
+                    param.requires_grad = False
 
     def forward(self, x):
         outputs = {}

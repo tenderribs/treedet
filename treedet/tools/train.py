@@ -23,7 +23,9 @@ def make_parser():
     parser.add_argument("-n", "--name", type=str, default=None, help="model name")
 
     # distributed
-    parser.add_argument("--dist-backend", default="nccl", type=str, help="distributed backend")
+    parser.add_argument(
+        "--dist-backend", default="nccl", type=str, help="distributed backend"
+    )
     parser.add_argument(
         "--dist-url",
         default=None,
@@ -31,7 +33,9 @@ def make_parser():
         help="url used to set up distributed training",
     )
     parser.add_argument("-b", "--batch-size", type=int, default=64, help="batch size")
-    parser.add_argument("-d", "--devices", default=None, type=int, help="device for training")
+    parser.add_argument(
+        "-d", "--devices", default=None, type=int, help="device for training"
+    )
     parser.add_argument(
         "-w",
         "--workers",
@@ -46,7 +50,9 @@ def make_parser():
         type=str,
         help="plz input your experiment description file",
     )
-    parser.add_argument("--resume", default=False, action="store_true", help="resume training")
+    parser.add_argument(
+        "--resume", default=False, action="store_true", help="resume training"
+    )
     parser.add_argument(
         "--dataset",
         default=None,
@@ -84,7 +90,9 @@ def make_parser():
         type=int,
         help="resume training start epoch",
     )
-    parser.add_argument("--num_machines", default=1, type=int, help="num of node for training")
+    parser.add_argument(
+        "--num_machines", default=1, type=int, help="num of node for training"
+    )
     parser.add_argument(
         "--machine_rank",
         default=0,
@@ -112,6 +120,18 @@ def make_parser():
         default=False,
         action="store_true",
         help="occupy GPU memory first for training.",
+    )
+    parser.add_argument(
+        "--freeze",
+        default=False,
+        action="store_true",
+        help="Freeze weights of first backbone layers",
+    )
+    parser.add_argument(
+        "--no_normalize_ds",
+        default=False,
+        action="store_true",
+        help="Normalize images w.r.t. dataset",
     )
     return parser
 
@@ -149,8 +169,9 @@ if __name__ == "__main__":
     exp.test_ann = ds["test_ann"]
     exp.val_ann = ds["val_ann"]
 
-    exp.mean_bgr = ds["mean_bgr"]
-    exp.std_bgr = ds["std_bgr"]
+    if not args.no_normalize_ds:
+        exp.mean_bgr = ds["mean_bgr"]
+        exp.std_bgr = ds["std_bgr"]
 
     if args.max_epoch:
         exp.max_epoch = args.max_epoch
@@ -158,6 +179,8 @@ if __name__ == "__main__":
     # set model size
     exp.depth, exp.width = model_sizes[args.model_size]
     exp.exp_name = f"yolox_{args.model_size}_tree_pose"
+
+    exp.freeze_backbone = args.freeze
 
     if not args.experiment_name:
         args.experiment_name = exp.exp_name

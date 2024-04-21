@@ -24,6 +24,7 @@ class YOLOPAFPN(nn.Module):
         act="silu",
         conv_focus=False,
         split_max_pool_kernel=False,
+        freeze_backbone=False,
     ):
         super().__init__()
         self.backbone = CSPDarknet(
@@ -33,6 +34,7 @@ class YOLOPAFPN(nn.Module):
             act=act,
             conv_focus=conv_focus,
             split_max_pool_kernel=split_max_pool_kernel,
+            freeze=freeze_backbone,
         )
         self.in_features = in_features
         self.in_channels = in_channels

@@ -45,6 +45,7 @@ class Exp(MyExp):
         self.enable_mixup = False
         # self.shape_loss = False
         # --------------  training config --------------------- #
+        self.freeze_backbone = False
         self.max_epoch = 100
         self.eval_interval = 5
         # self.print_interval = 25
@@ -73,6 +74,7 @@ class Exp(MyExp):
                 act=self.act,
                 conv_focus=True,
                 split_max_pool_kernel=True,
+                freeze_backbone=self.freeze_backbone,
             )
             head = YOLOXHeadKPTS(
                 self.num_classes,
@@ -83,15 +85,20 @@ class Exp(MyExp):
                 num_kpts=self.num_kpts,
             )
 
-            # make sure that this is injected by the external script
-            assert self.mean_bgr is not None and self.std_bgr is not None
+            # if not specified, then
+            if self.mean_bgr is None and self.std_bgr is None:
+                print("heads up: dataset normalization disabled")
+                self.mean_bgr = [0, 0, 0]
+                self.std_bgr = [1, 1, 1]
             self.model = YOLOX(self.mean_bgr, self.std_bgr, backbone, head)
 
         self.model.apply(init_yolo)
         self.model.head.initialize_biases(1e-2)
         return self.model
 
-    def get_data_loader(self, batch_size, is_distributed, no_aug=False, cache_img=False):
+    def get_data_loader(
+        self, batch_size, is_distributed, no_aug=False, cache_img=False
+    ):
         from yolox.data import (
             TREEKPTSDataset,
             TrainTransform,
@@ -185,7 +192,9 @@ class Exp(MyExp):
 
         if is_distributed:
             batch_size = batch_size // dist.get_world_size()
-            sampler = torch.utils.data.distributed.DistributedSampler(valdataset, shuffle=False)
+            sampler = torch.utils.data.distributed.DistributedSampler(
+                valdataset, shuffle=False
+            )
         else:
             sampler = torch.utils.data.SequentialSampler(valdataset)
 
