@@ -8,7 +8,7 @@ python3 -m yolox.tools.train -n yolox_tree_pose -b 32 --fp16 --occupy --workers 
 
 # train on real data
 python3 -m yolox.tools.train -n yolox_tree_pose -b 32 --fp16 --occupy --workers 12 --max-epoch 50 \
-    -c pretrained_models/2024-04-22_yolox_s_synth43k_l1.pth --model-size s --dataset canawiki200
+    -c pretrained_models/2024-04-10_yolox_s_synth43k_norm_nomosaic.pth --model-size s --dataset canawikisparse325
 
 # train with frozen backbone weights
 python3 -m yolox.tools.train -n yolox_tree_pose -b 32 --fp16 --occupy --workers 12 --max-epoch 50 \
@@ -16,18 +16,18 @@ python3 -m yolox.tools.train -n yolox_tree_pose -b 32 --fp16 --occupy --workers 
 
 # export onnx
 python3 -m yolox.tools.export_onnx \
-    --output-name pretrained_models/yolox_s_canawiki200_l1.onnx \
+    --output-name pretrained_models/yolox_s_canawiki325sparse.onnx \
     --model-size s \
     -f exps/default/yolox_tree_pose.py \
-    -c pretrained_models/2024-04-22_yolox_s_canawiki200_l1.pth \
+    -c pretrained_models/2024-04-22_yolox_s_canawiki325sparse.pth \
     --dataset canawiki200
 
 # run inference
 python3 kpts_onnx_inference.py \
-    --model pretrained_models/yolox_s_canawiki200_l1.onnx \
-    --output_dir YOLOX_outputs/inf_canawiki200_l1_sussy \
-    --images_path ./datasets/sussy_images \
-    --score_thr 0.95
+    --model pretrained_models/yolox_s_canawiki325sparse.onnx \
+    --output_dir YOLOX_outputs/inf_canawiki325sparse \
+    --images_path ./datasets/mark_forest \
+    --score_thr 0.85
 
 # create trt engine
 trtexec \
