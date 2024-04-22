@@ -184,6 +184,12 @@ class Trainer:
         self.model = model
         self.model.train()
 
+        # enable l1 regularization from the beginning
+        if self.is_distributed:
+            self.model.module.head.use_l1 = True
+        else:
+            self.model.head.use_l1 = True
+
         self.evaluator = self.exp.get_evaluator(
             batch_size=self.args.batch_size, is_distributed=self.is_distributed
         )
