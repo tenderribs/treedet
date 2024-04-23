@@ -63,12 +63,62 @@ def make_parser():
     return parser
 
 
+def visualize(img, det):
+    # plot the bounding box
+    p1 = (int(det[0]), int(det[1]))
+    p2 = (int(det[2]), int(det[3]))
+    conf = int(round(det[4] * 100, 0))
+
+    # Draw a filled rectangle on the overlay with some opacity
+    overlay = img.copy()
+    cv2.rectangle(overlay, p1, p2, (255, 251, 43), -1)  # -1 fills the rectangle
+
+    # Alpha determines the transparency of the overlay: 0 is fully transparent, 1 is fully opaque
+    alpha = 0.4
+
+    # Blend the overlay with the original image
+    img = cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
+
+    # Draw the bounding box edges on the original image
+    cv2.rectangle(img, p1, p2, (255, 251, 43), 2)
+
+    # draw confidence score
+    cv2.putText(
+        img=img,
+        text=f"{conf}%",
+        org=(int(det[15]) - 10, int(det[16]) + 20),
+        fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+        fontScale=0.4,
+        color=(59, 40, 34),
+        thickness=1,
+    )
+
+    # plot the x and y keypoints with sufficient confidence score
+    for x, y, conf, label in zip(
+        det[6::3],
+        det[7::3],
+        det[8::3],
+        ["kpC", "kpL", "kpL", "ax1", "ax2"],
+    ):
+        cv2.circle(
+            img,
+            (int(x), int(y)),
+            radius=2,
+            color=(52, 64, 235),
+            thickness=-1,
+        )
+
+    return img
+
+
 if __name__ == "__main__":
     args = make_parser().parse_args()
     input_shape = tuple(map(int, args.input_shape.split(",")))
 
     image_files = [
-        f for f in os.listdir(args.images_path) if os.path.isfile(os.path.join(args.images_path, f))
+        f
+        for f in os.listdir(args.images_path)
+        if os.path.isfile(os.path.join(args.images_path, f))
     ]
     image_files = [
         f for f in image_files if f.lower().endswith((".png", ".jpg", ".jpeg"))
@@ -99,41 +149,8 @@ if __name__ == "__main__":
         dets[:, 7::3] /= ratio
 
         if dets is not None:
-            final_boxes, final_scores, final_cls_inds = (
-                dets[:, :4],
-                dets[:, 4],
-                dets[:, 5],
-            )
-
             for det in dets:
-                # plot the bounding box
-                p1 = (int(det[0]), int(det[1]))
-                p2 = (int(det[2]), int(det[3]))
-                cv2.rectangle(origin_img, p1, p2, (255, 251, 43), 2)
-
-                # plot the x and y keypoints with sufficient confidence score
-                for x, y, conf, label in zip(
-                    det[6::3],
-                    det[7::3],
-                    det[8::3],
-                    ["kpC", "kpL", "kpL", "ax1", "ax2"],
-                ):
-                    cv2.circle(
-                        origin_img,
-                        (int(x), int(y)),
-                        radius=2,
-                        color=(52, 64, 235),
-                        thickness=-1,
-                    )
-                    cv2.putText(
-                        origin_img,
-                        label,
-                        (int(x), int(y) + 5),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.1,
-                        (255, 255, 255),
-                        1,
-                    )
+                origin_img = visualize(origin_img, det)
 
         mkdir(args.output_dir)
         output_path = os.path.join(args.output_dir, image_file)
