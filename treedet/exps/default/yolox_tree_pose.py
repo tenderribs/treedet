@@ -83,15 +83,16 @@ class Exp(MyExp):
                 num_kpts=self.num_kpts,
             )
 
-            # make sure that this is injected by the external script
-            assert self.mean_bgr is not None and self.std_bgr is not None
+            assert self.mean_bgr is None and self.std_bgr is None
             self.model = YOLOX(self.mean_bgr, self.std_bgr, backbone, head)
 
         self.model.apply(init_yolo)
         self.model.head.initialize_biases(1e-2)
         return self.model
 
-    def get_data_loader(self, batch_size, is_distributed, no_aug=False, cache_img=False):
+    def get_data_loader(
+        self, batch_size, is_distributed, no_aug=False, cache_img=False
+    ):
         from yolox.data import (
             TREEKPTSDataset,
             TrainTransform,
@@ -185,7 +186,9 @@ class Exp(MyExp):
 
         if is_distributed:
             batch_size = batch_size // dist.get_world_size()
-            sampler = torch.utils.data.distributed.DistributedSampler(valdataset, shuffle=False)
+            sampler = torch.utils.data.distributed.DistributedSampler(
+                valdataset, shuffle=False
+            )
         else:
             sampler = torch.utils.data.SequentialSampler(valdataset)
 

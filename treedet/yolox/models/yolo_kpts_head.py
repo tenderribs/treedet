@@ -587,8 +587,7 @@ class YOLOXHeadKPTS(nn.Module):
                 / num_fg
                 / self.num_kpts
             )
-            loss_l1 = 0.0
-            loss_l1_kpts = 0
+
         else:
             loss_l1 = 0.0
             loss_l1_kpts = 0
