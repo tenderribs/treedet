@@ -4,25 +4,21 @@ import math
 from PIL import Image, ImageDraw, ImageFont
 
 folders = [
-    "inf_yolox_s_cana100_try2_norm.onnx",
-    "inf_yolox_s_canawiki200_frozen.onnx",
-    "inf_yolox_s_canawiki200_l1.onnx",
     "inf_yolox_s_canawiki325_sparse_nol1.onnx",
-    "inf_yolox_s_canawiki325_sparse_l1.onnx",
+    "inf_yolox_l_canawikisparse325_late_l1.onnx",
+    "inf_yolox_l_canawikisparse325_l1.onnx",
 ]
 
 labels = [
-    "canawiki200 baseline",
-    "canawiki200 frozen",
-    "canawiki200 L1",
-    "sparse tree baseline",
-    "sparse tree L1",
+    "S sparse no L1",
+    "L sparse late L1",
+    "L sparse full L1",
 ]
 
 assert len(folders) == len(labels)
 
 folder_base = "YOLOX_outputs"
-output_folder = "YOLOX_outputs/sidebyside_sussy"
+output_folder = "YOLOX_outputs/sidebyside_mark_forest"
 
 # Make sure output folder exists
 os.makedirs(output_folder, exist_ok=True)

@@ -2,24 +2,16 @@
 python3 -m yolox.tools.train -n yolox_tree_pose -b 32 --fp16 --occupy --workers 12 --max-epoch 75 \
 -c pretrained_models/yolox-s-ti-lite_39p1_57p9_checkpoint.pth --model-size s --dataset synth43k
 
-# train with frozen backbone weights
-python3 -m yolox.tools.train -n yolox_tree_pose -b 32 --fp16 --occupy --workers 12 --max-epoch 75 \
--c pretrained_models/yolox-s-ti-lite_39p1_57p9_checkpoint.pth --model-size s --dataset synth43k --freeze --no_normalize_ds
-
 # train on real data
-python3 -m yolox.tools.train -n yolox_tree_pose -b 32 --fp16 --occupy --workers 12 --max-epoch 50 \
--c pretrained_models/2024-04-10_yolox_s_synth43k_norm_nomosaic.pth --model-size s --dataset canawikisparse325
-
-# train with frozen backbone weights
-python3 -m yolox.tools.train -n yolox_tree_pose -b 32 --fp16 --occupy --workers 12 --max-epoch 50 \
--c pretrained_models/2024-04-22_yolox_s_synth43k_frozen.pth --model-size s --dataset canawiki200 --freeze --no_normalize_ds
+python3 -m yolox.tools.train -n yolox_tree_pose -b 16 --fp16 --occupy --workers 12 --max-epoch 50 \
+-c pretrained_models/2024-03-27_yolox_l_synth43k_best.pth --model-size l --dataset canawikisparse325
 
 # export onnx
 python3 -m yolox.tools.export_onnx \
---output-name pretrained_models/yolox_s_canawiki325sparse_nol1.onnx \
---model-size s \
+--output-name pretrained_models/yolox_l_canawikisparse325_l1.onnx \
+--model-size l \
 -f exps/default/yolox_tree_pose.py \
--c pretrained_models/2024-04-23_yolox_s_canawikisparse325_no_l1.pth \
+-c pretrained_models/2024-04-24_yolox_l_canawikisparse325_l1.pth \
 --dataset canawikisparse325
 
 # run inference
