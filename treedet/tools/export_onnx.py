@@ -40,7 +40,9 @@ def make_parser():
         type=str,
         help="output node name of onnx model",
     )
-    parser.add_argument("-o", "--opset", default=16, type=int, help="onnx opset version")
+    parser.add_argument(
+        "-o", "--opset", default=16, type=int, help="onnx opset version"
+    )
     parser.add_argument("--batch-size", type=int, default=1, help="batch size")
     parser.add_argument(
         "--dynamic",
@@ -65,7 +67,9 @@ def make_parser():
         help="expriment description file",
     )
     parser.add_argument("-expn", "--experiment-name", type=str, default=None)
-    parser.add_argument("--task", default=None, type=str, help="type of task for model eval")
+    parser.add_argument(
+        "--task", default=None, type=str, help="type of task for model eval"
+    )
     parser.add_argument("-n", "--name", type=str, default=None, help="model name")
     parser.add_argument("-c", "--ckpt", default=None, type=str, help="ckpt path")
     parser.add_argument(
@@ -75,12 +79,6 @@ def make_parser():
         help="dataset for training",
         choices=list(datasets.keys()),
         required=True,
-    )
-    parser.add_argument(
-        "--no_normalize_ds",
-        default=False,
-        action="store_true",
-        help="Normalize images w.r.t. dataset",
     )
     return parser
 
@@ -95,9 +93,8 @@ def main(exp=None):
     exp.exp_name = f"yolox_{args.model_size}_tree_pose"
     ds = datasets[args.dataset]
 
-    if not args.no_normalize_ds:
-        exp.mean_bgr = ds["mean_bgr"]
-        exp.std_bgr = ds["std_bgr"]
+    exp.mean_bgr = ds["mean_bgr"]
+    exp.std_bgr = ds["std_bgr"]
 
     if not args.experiment_name:
         args.experiment_name = exp.exp_name
@@ -123,7 +120,9 @@ def main(exp=None):
         input_names=[args.input],
         output_names=[args.output],
         dynamic_axes=(
-            {args.input: {0: "batch"}, args.output: {0: "batch"}} if args.dynamic else None
+            {args.input: {0: "batch"}, args.output: {0: "batch"}}
+            if args.dynamic
+            else None
         ),
         opset_version=args.opset,
     )

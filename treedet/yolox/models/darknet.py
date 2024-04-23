@@ -117,7 +117,6 @@ class CSPDarknet(nn.Module):
         act="silu",
         conv_focus=False,
         split_max_pool_kernel=False,
-        freeze=False,
     ):
         super().__init__()
         assert out_features, "please provide output features of Darknet"
@@ -190,17 +189,6 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
-
-        # optionally freeze first layers in order to reduce overfitting to tree-heavy images
-        if freeze:
-            print("heads up: freezing first network layers")
-            for module in [
-                self.stem,
-                self.dark2,
-                self.dark3,
-            ]:
-                for param in module.parameters():
-                    param.requires_grad = False
 
     def forward(self, x):
         outputs = {}

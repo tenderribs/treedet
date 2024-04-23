@@ -45,7 +45,6 @@ class Exp(MyExp):
         self.enable_mixup = False
         # self.shape_loss = False
         # --------------  training config --------------------- #
-        self.freeze_backbone = False
         self.max_epoch = 100
         self.eval_interval = 5
         # self.print_interval = 25
@@ -74,7 +73,6 @@ class Exp(MyExp):
                 act=self.act,
                 conv_focus=True,
                 split_max_pool_kernel=True,
-                freeze_backbone=self.freeze_backbone,
             )
             head = YOLOXHeadKPTS(
                 self.num_classes,
@@ -85,11 +83,7 @@ class Exp(MyExp):
                 num_kpts=self.num_kpts,
             )
 
-            # if not specified, then
-            if self.mean_bgr is None and self.std_bgr is None:
-                print("heads up: dataset normalization disabled")
-                self.mean_bgr = [0, 0, 0]
-                self.std_bgr = [1, 1, 1]
+            assert self.mean_bgr is None and self.std_bgr is None
             self.model = YOLOX(self.mean_bgr, self.std_bgr, backbone, head)
 
         self.model.apply(init_yolo)

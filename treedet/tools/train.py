@@ -121,18 +121,6 @@ def make_parser():
         action="store_true",
         help="occupy GPU memory first for training.",
     )
-    parser.add_argument(
-        "--freeze",
-        default=False,
-        action="store_true",
-        help="Freeze weights of first backbone layers",
-    )
-    parser.add_argument(
-        "--no_normalize_ds",
-        default=False,
-        action="store_true",
-        help="Normalize images w.r.t. dataset",
-    )
     return parser
 
 
@@ -169,9 +157,8 @@ if __name__ == "__main__":
     exp.test_ann = ds["test_ann"]
     exp.val_ann = ds["val_ann"]
 
-    if not args.no_normalize_ds:
-        exp.mean_bgr = ds["mean_bgr"]
-        exp.std_bgr = ds["std_bgr"]
+    exp.mean_bgr = ds["mean_bgr"]
+    exp.std_bgr = ds["std_bgr"]
 
     if args.max_epoch:
         exp.max_epoch = args.max_epoch
@@ -179,8 +166,6 @@ if __name__ == "__main__":
     # set model size
     exp.depth, exp.width = model_sizes[args.model_size]
     exp.exp_name = f"yolox_{args.model_size}_tree_pose"
-
-    exp.freeze_backbone = args.freeze
 
     if not args.experiment_name:
         args.experiment_name = exp.exp_name

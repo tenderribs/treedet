@@ -18,11 +18,15 @@ class YOLOX(nn.Module):
     """
 
     def __init__(
-        self, mean_bgr, std_bgr, backbone=None, head=None, freeze_backbone=False
+        self,
+        mean_bgr,
+        std_bgr,
+        backbone=None,
+        head=None,
     ):
         super().__init__()
         if backbone is None:
-            backbone = YOLOPAFPN(freeze_backbone=freeze_backbone)
+            backbone = YOLOPAFPN()
         if head is None:
             head = YOLOXHead(80)
 
