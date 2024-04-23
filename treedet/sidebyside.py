@@ -1,48 +1,69 @@
-from PIL import Image, ImageDraw
-
 import os
+import math
 
-# Set the paths to your folders
-folder1 = "YOLOX_outputs/inf_sussy"
-folder2 = "YOLOX_outputs/inf_sussy_frozen"
-output_folder = "YOLOX_outputs/ds_sidebyside_sussy"
+from PIL import Image, ImageDraw, ImageFont
+
+folders = [
+    "inf_yolox_s_cana100_try2_norm.onnx",
+    "inf_yolox_s_canawiki200_frozen.onnx",
+    "inf_yolox_s_canawiki200_l1.onnx",
+    "inf_yolox_s_canawiki325_sparse_nol1.onnx",
+    "inf_yolox_s_canawiki325_sparse_l1.onnx",
+]
+
+labels = [
+    "canawiki200 baseline",
+    "canawiki200 frozen",
+    "canawiki200 L1",
+    "sparse tree baseline",
+    "sparse tree L1",
+]
+
+assert len(folders) == len(labels)
+
+folder_base = "YOLOX_outputs"
+output_folder = "YOLOX_outputs/sidebyside_sussy"
 
 # Make sure output folder exists
 os.makedirs(output_folder, exist_ok=True)
 
 # Get the list of image filenames in the first folder
-filenames = os.listdir(folder1)
+filenames = os.listdir(os.path.join(folder_base, folders[0]))
+filenames = [
+    file for file in filenames if file.endswith(".jpg") or file.endswith(".png")
+]
 
-for filename in filenames:
-    # Construct the full file path for both images
-    file1 = os.path.join(folder1, filename)
-    file2 = os.path.join(folder2, filename)
+cols = 2
 
-    if os.path.isfile(file1) and os.path.isfile(file2):
-        # Open the images
-        image1 = Image.open(file1)
-        image2 = Image.open(file2)
+for file in filenames:
+    print(f"processing {file}")
 
-        # Create a new image with appropriate dimensions
-        new_width = max(image1.width, image2.width)
-        new_height = image1.height + image2.height
+    files = [os.path.join(folder_base, folder, file) for folder in folders]
+    images = [Image.open(file) for file in files]
 
-        new_image = Image.new("RGB", (new_width, new_height))
+    # Create a new image with appropriate dimensions
+    width = images[0].width
+    height = images[0].height
 
+    collage_width = width * cols
+    collage_height = height * (math.ceil(len(images) / float(cols)))
+    new_image = Image.new("RGB", (collage_width, collage_height))
+
+    # for text labels:
+    draw = ImageDraw.Draw(new_image)
+    font_size = 20  # Adjust as needed
+    font = ImageFont.truetype("Arial.ttf", font_size)
+
+    for idx, (image, label) in enumerate(zip(images, labels)):
         # Paste the images above eachother
-        new_image.paste(image1, (0, 0))
-        new_image.paste(image2, (0, image1.height))
+        corner_x = width * (idx % cols)
+        corner_y = height * (idx // cols)
+        new_image.paste(image, (corner_x, corner_y))
 
-        # add text labels:
-        text_height = 20
-        draw = ImageDraw.Draw(new_image)
+        draw.rectangle(
+            [(corner_x, corner_y), (corner_x + 250, corner_y + 30)], fill="#fff"
+        )
+        draw.text((corner_x + 10, corner_y), label, fill="black", font=font)
 
-        draw.rectangle([(0, 0), (75, 20)], fill="#fff")
-        draw.text((10, 0), "cana100", fill="black")
-
-        draw.rectangle([(0, image1.height), (75, image1.height + 14)], fill="#fff")
-        draw.text((10, image1.height), "wiki100", fill="black")
-
-        # Save the new image
-        output_filename = os.path.join(output_folder, filename)
-        new_image.save(output_filename)
+    output_filename = os.path.join(output_folder, file)
+    new_image.save(output_filename)

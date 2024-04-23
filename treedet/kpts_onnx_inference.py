@@ -88,9 +88,9 @@ def visualize(img, det):
         text=f"{conf}%",
         org=(int(det[15]) - 10, int(det[16]) + 20),
         fontFace=cv2.FONT_HERSHEY_SIMPLEX,
-        fontScale=0.4,
+        fontScale=0.5,
         color=(59, 40, 34),
-        thickness=1,
+        thickness=2,
     )
 
     # plot the x and y keypoints with sufficient confidence score
@@ -103,7 +103,7 @@ def visualize(img, det):
         cv2.circle(
             img,
             (int(x), int(y)),
-            radius=2,
+            radius=4,
             color=(52, 64, 235),
             thickness=-1,
         )
