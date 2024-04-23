@@ -12,7 +12,6 @@ import wandb
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.tensorboard import SummaryWriter
 
 from yolox.data import DataPrefetcher, DataPrefetcherCPU
 from yolox.utils import (
@@ -142,7 +141,9 @@ class Trainer:
             torch.cuda.set_device(self.local_rank)
         #
         model = self.exp.get_model()
-        logger.info("Model Summary: {}".format(get_model_info(model, self.exp.test_size)))
+        logger.info(
+            "Model Summary: {}".format(get_model_info(model, self.exp.test_size))
+        )
         model.to(self.device)
 
         # solver related init
@@ -184,18 +185,9 @@ class Trainer:
         self.model = model
         self.model.train()
 
-        # enable l1 regularization from the beginning
-        if self.is_distributed:
-            self.model.module.head.use_l1 = True
-        else:
-            self.model.head.use_l1 = True
-
         self.evaluator = self.exp.get_evaluator(
             batch_size=self.args.batch_size, is_distributed=self.is_distributed
         )
-        # Tensorboard logger
-        if self.rank == 0:
-            self.tblogger = SummaryWriter(self.file_name)
 
         logger.info("Training start...")
         logger.info("\n{}".format(model))
@@ -220,7 +212,9 @@ class Trainer:
         wandb.finish()
 
         logger.info(
-            "Training of experiment is done and the best AP is {:.2f}".format(self.best_ap * 100)
+            "Training of experiment is done and the best AP is {:.2f}".format(
+                self.best_ap * 100
+            )
         )
 
     def before_epoch(self):
@@ -291,7 +285,9 @@ class Trainer:
             )
             self.start_epoch = start_epoch
             logger.info(
-                "loaded checkpoint '{}' (epoch {})".format(self.args.resume, self.start_epoch)
+                "loaded checkpoint '{}' (epoch {})".format(
+                    self.args.resume, self.start_epoch
+                )
             )  # noqa
         else:
             if self.args.ckpt is not None:
@@ -311,12 +307,12 @@ class Trainer:
             if is_parallel(evalmodel):
                 evalmodel = evalmodel.module
 
-        ap50_95, ap50, summary = self.exp.eval(evalmodel, self.evaluator, self.is_distributed)
+        ap50_95, ap50, summary = self.exp.eval(
+            evalmodel, self.evaluator, self.is_distributed
+        )
         self.model.train()
 
         if self.rank == 0:
-            self.tblogger.add_scalar("val/COCOAP50", ap50, self.epoch + 1)
-            self.tblogger.add_scalar("val/COCOAP50_95", ap50_95, self.epoch + 1)
             wandb.log(
                 {
                     "AP50": ap50,
