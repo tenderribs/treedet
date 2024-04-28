@@ -75,13 +75,13 @@ def get_detections(raw_dets: list, rescale_ratio: float):
     return raw_dets[:, :4], raw_dets[:, 4], raw_dets[:, 6:]
 
 
-def get_cutting_data(kpts: np.ndarray, depth_img: np.ndarray):
+def get_cutting_data(kpts: np.ndarray, pcl: PointCloud2):
     assert kpts.shape[1] == 15
 
     cut_uv = np.round(kpts[:, 0:2])
 
     # convert felling cut pixel coords to 3D
-    cut_XYZ, uv_mask, depth_mask = uv2xyz(cut_uv, depth_img)
+    cut_XYZ, uv_mask, depth_mask = uv2xyz(cut_uv, s)
 
     # only calculate inclination and diameter for kpts that were detected in depth camera
     # apply the masks sequentially, following the process from uv2xyz to accomodate index shifts
@@ -120,31 +120,16 @@ def uv2xy(uv: np.ndarray, Z: np.ndarray):
     return X, Y
 
 
-def uv2xyz(uv: np.ndarray, depth_img: np.ndarray):
-    """Convert from pixel coordinates to 3D point with depth image information
+def uv2xyz(uv: np.ndarray, pcl: PointCloud2):
+    """Convert from pixel coordinates to 3D point with point cloud information
 
     Resulting cartesian coordinates are consistent with the stereolabs frame of ref:
     - https://docs.opencv.org/4.5.5/pinhole_camera_model.png
     - https://www.stereolabs.com/docs/positional-tracking/coordinate-frames#selecting-a-coordinate-system
     """
-    height, width = depth_img.shape
-    positive = (uv[:, 0] >= 0) & (uv[:, 1] >= 0)
-    in_bounds = (uv[:, 0] < width) & (uv[:, 1] < height)
+    X, Y = uv2xy(, Z)
 
-    # discard all coords with invalid indices
-    uv = uv[positive & in_bounds]
-
-    # fetch depth data in meters
-    Z = depth_img[
-        uv[:, 1].astype(int),
-        uv[:, 0].astype(int),
-    ]
-    valid_depth = ~(np.isnan(Z) | np.isinf(Z))
-    Z = Z[valid_depth]
-
-    X, Y = uv2xy(uv[valid_depth], Z)
-
-    # , positive & in_bounds & valid_z
+    # positive & in_bounds & valid_z
     return np.column_stack((X, Y, Z)), positive & in_bounds, valid_depth
 
 
@@ -222,10 +207,10 @@ class CameraSubscriber:
             self.rgb_callback,
         )
 
-        self.depth_subscriber = rospy.Subscriber(
-            "/zed2i/zed_node/depth/depth_registered",
-            Image,
-            self.depth_callback,
+        self.lidar_subscriber = rospy.Subscriber(
+            "/hesai/pandar",
+            PointCloud2,
+            self.lidar_callback,
         )
 
         # Timer to process messages at a desired frequency (e.g., 1 Hz)
@@ -235,7 +220,7 @@ class CameraSubscriber:
         with self.lock:
             self.data_buffer[0].append(comp_image)
 
-    def depth_callback(self, img: Image):
+    def lidar_callback(self, img: Image):
         with self.lock:
             self.data_buffer[1].append(img)
 
@@ -244,22 +229,15 @@ class CameraSubscriber:
             if self.data_buffer[0] and self.data_buffer[1]:
                 # Process the last message received
                 rgb_msg: CompressedImage = self.data_buffer[0][-1]
-                depth_msg: Image = self.data_buffer[1][-1]
-
                 rgb_img: np.ndarray = br.compressed_imgmsg_to_cv2(rgb_msg)
-                depth_img: np.ndarray = br.imgmsg_to_cv2(depth_msg)
-
                 rgb_img = rgb_img[:, :, :3]  # cut out the alpha channel (bgra8 -> bgr8)
+                print(rgb_img.shape)
+                lidar_pcl: PointCloud2 = self.data_buffer[1][-1]
 
-                self.process_imgs(rgb_img, depth_img)
+                self.process(rgb_img, lidar_pcl)
                 self.data_buffer = ([], [])
 
-    def process_imgs(self, rgb_img: np.ndarray, depth_img: np.ndarray):
-        assert (
-            rgb_img.shape[0] == depth_img.shape[0]
-            and rgb_img.shape[1] == depth_img.shape[1]
-        ), f"Invalid image shape rgb: {rgb_img.shape} d: {depth_img.shape}"
-
+    def process(self, rgb_img: np.ndarray, pcl: PointCloud2):
         start_time = time.perf_counter()
         img, ratio = preprocess_rgb(rgb_img, (384, 672))
 
@@ -273,8 +251,9 @@ class CameraSubscriber:
             f"preproc + inf:\t{round((time.perf_counter() - start_time) * 1000, 3)} ms"
         )
 
-        _, _, kpts = get_detections(output[0], ratio)
-        cut_XYZ, diam, incl_radians = get_cutting_data(kpts, depth_img)
+        bboxes, confs, kpts = get_detections(output[0], ratio)
+        cut_XYZ, diam, incl_radians = get_cutting_data(kpts, pcl)
+        return
 
         assert (
             cut_XYZ.shape[0] == diam.shape[0]
