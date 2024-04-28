@@ -21,7 +21,7 @@ def make_parser():
     )
     parser.add_argument("-f", "--exp_file", type=str, default="synth43k", required=True)
     parser.add_argument("-c", "--ckpt", type=str, default="synth43k", required=True)
-    parser.add_argument("--testset", action="store_true", required=True)
+    parser.add_argument("--testset", action="store_true")
     parser.add_argument(
         "-ms",
         "--model-size",
@@ -59,6 +59,7 @@ if __name__ == "__main__":
     exp.depth, exp.width = model_sizes[args.model_size]
 
     ds = datasets[args.dataset]
+
     exp.mean_bgr = ds["mean_bgr"]
     exp.std_bgr = ds["std_bgr"]
 
