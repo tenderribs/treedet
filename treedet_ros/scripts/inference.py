@@ -12,7 +12,7 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CompressedImage
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
-from geometry_msgs.msg import Point, Quaternion
+from geometry_msgs.msg import Quaternion
 
 
 from visualization_msgs.msg import Marker, MarkerArray
@@ -21,7 +21,7 @@ import tf.transformations
 marker = Marker()
 
 # process incoming images at given frequency:
-RATE_LIMIT = 10.0
+RATE_LIMIT = 20.0
 
 
 br = CvBridge()
@@ -64,7 +64,7 @@ def get_detections(raw_dets: list, rescale_ratio: float):
     Get filtered detections in scaling of original rgb and depth image
     """
     # filter uncertain bad detections
-    raw_dets = raw_dets[raw_dets[:, 4] >= 0.95]
+    raw_dets = raw_dets[raw_dets[:, 4] >= 0.9]
 
     # rescale bbox and kpts w.r.t original image
     raw_dets[:, :4] /= rescale_ratio
@@ -152,8 +152,7 @@ def uv2incl(ax1: np.ndarray, fc: np.ndarray) -> np.ndarray:
     """Get counter-clockwise inclination in radians of tree w.r.t the "upwards" vertical axis"""
     du = fc[:, 0] - ax1[:, 0]
     dv = fc[:, 1] - ax1[:, 1]
-
-    return np.arctan2(du, dv)
+    return -(np.pi / 2 + np.arctan2(du, dv))
 
 
 def pc2_msg(XYZ: np.ndarray, diam: np.ndarray, incl: np.ndarray) -> PointCloud2:
@@ -176,7 +175,9 @@ def pc2_msg(XYZ: np.ndarray, diam: np.ndarray, incl: np.ndarray) -> PointCloud2:
 
 def markers(XYZ, diameters, inclinations, frame_id="zed2i_left_camera_optical_frame"):
     marker_array = MarkerArray()
-
+    # delete_marker = Marker()
+    # delete_marker.action = Marker.DELETEALL
+    # marker_array.markers.append(delete_marker)
     for i, (point, diameter, inclination) in enumerate(
         zip(XYZ, diameters, inclinations)
     ):
@@ -197,12 +198,9 @@ def markers(XYZ, diameters, inclinations, frame_id="zed2i_left_camera_optical_fr
         orient_marker.pose.position.y = point[1]
         orient_marker.pose.position.z = point[2]
         # Convert inclination to quaternion for roll axis (Z-axis rotation)
-        quat = tf.transformations.quaternion_from_euler(
-            0, 0, -(np.pi / 2 + inclination)
-        )
+        quat = tf.transformations.quaternion_from_euler(0, 0, inclination)
         orient_marker.pose.orientation = Quaternion(*quat)
-
-    marker_array.markers.append(orient_marker)
+        marker_array.markers.append(orient_marker)
     return marker_array
 
 
@@ -224,7 +222,7 @@ class CameraSubscriber:
             self.rgb_callback,
         )
 
-        self.rgb_subscriber = rospy.Subscriber(
+        self.depth_subscriber = rospy.Subscriber(
             "/zed2i/zed_node/depth/depth_registered",
             Image,
             self.depth_callback,
