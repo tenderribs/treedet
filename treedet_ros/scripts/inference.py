@@ -7,6 +7,10 @@ import os
 import numpy as np
 import cv2
 import time
+import tf2_ros
+import tf2_sensor_msgs
+import tf.transformations
+import ros_numpy
 
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CompressedImage
@@ -14,23 +18,32 @@ from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
 from geometry_msgs.msg import Quaternion
 
-
 from visualization_msgs.msg import Marker, MarkerArray
-import tf.transformations
-
-marker = Marker()
+from scipy.spatial import Delaunay
 
 # process incoming images at given frequency:
-RATE_LIMIT = 20.0
-
+RATE_LIMIT = 10.0
 
 br = CvBridge()
 
+
 # taken from P matrix published by /zed2i/zed_node/depth/camera_info
-fx = 487.29986572265625
-fy = 487.29986572265625
-cx = 325.617431640625
-cy = 189.09378051757812
+P = np.array(
+    [
+        [486.89678955078125, 0.0, 325.613525390625, 0.0],
+        [0.0, 486.89678955078125, 189.09512329101562, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+    ]
+)
+
+fx = P[0, 0]
+fy = P[1, 1]
+cx = P[0, 2]
+cy = P[1, 2]
+
+# depth limits of the frustum
+Z_MIN = 0.1
+Z_MAX = 20
 
 detection_pub = rospy.Publisher("/tree_det/felling_cut", PointCloud2, queue_size=10)
 marker_pub = rospy.Publisher("/tree_det/markers", MarkerArray, queue_size=10)
@@ -59,6 +72,24 @@ def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
     return np.ascontiguousarray(padded_img, dtype=np.float32), r
 
 
+def transform_point_cloud(tf_buffer, pcl, frame_id="zed2i_left_camera_optical_frame"):
+    try:
+        trans = tf_buffer.lookup_transform(
+            frame_id,
+            pcl.header.frame_id,
+            rospy.Time(0),
+            rospy.Duration(1.0),
+        )
+        return tf2_sensor_msgs.do_transform_cloud(pcl, trans)
+    except (
+        tf2_ros.LookupException,
+        tf2_ros.ConnectivityException,
+        tf2_ros.ExtrapolationException,
+    ):
+        print("sth wrong with tf")
+        return None
+
+
 def get_detections(raw_dets: list, rescale_ratio: float):
     """
     Get filtered detections in scaling of original rgb and depth image
@@ -75,62 +106,30 @@ def get_detections(raw_dets: list, rescale_ratio: float):
     return raw_dets[:, :4], raw_dets[:, 4], raw_dets[:, 6:]
 
 
-def get_cutting_data(kpts: np.ndarray, pcl: PointCloud2):
-    assert kpts.shape[1] == 15
-
-    cut_uv = np.round(kpts[:, 0:2])
-
-    # convert felling cut pixel coords to 3D
-    cut_XYZ, uv_mask, depth_mask = uv2xyz(cut_uv, s)
-
-    # only calculate inclination and diameter for kpts that were detected in depth camera
-    # apply the masks sequentially, following the process from uv2xyz to accomodate index shifts
-    l_uv = np.round(kpts[:, 3:5])[uv_mask][depth_mask]
-    r_uv = np.round(kpts[:, 6:8])[uv_mask][depth_mask]
-
-    # Reuse the z from the felling cut in trunk center because sometimes depth measurement
-    # is more reliable. Sometimes treedet places markers next to the trunk and then their depth value
-    # comes from the background, and thus is possibly np.inf or np.nan. That makes it impossible to use
-    # uv2xyz (no valid Z data for projection). Instead we project uv onto Z=Z_c plane of
-    # the felling cut.
-    z_of_cut = cut_XYZ[:, 2]
-
-    assert l_uv.shape == r_uv.shape and r_uv.shape[0] == z_of_cut.shape[0]
-
-    Xl, Yl = uv2xy(l_uv, z_of_cut)
-    print(Xl)
-    Xr, Yr = uv2xy(r_uv, z_of_cut)
-    cut_diam = np.sqrt((Xr - Xl) ** 2 + (Yr - Yl) ** 2)
-
-    # get the inclination of the tree w.r.t camera vertical axis
-    ax1_uv = np.round(kpts[:, 9:11])[uv_mask][depth_mask]
-    cut_uv = cut_uv[uv_mask][depth_mask]
-    cut_incl_radians = uv2incl(ax1=ax1_uv, fc=cut_uv)
-
-    return cut_XYZ, cut_diam, cut_incl_radians
-
-
-def uv2xy(uv: np.ndarray, Z: np.ndarray):
-    """Conv pixel coords to world coords in zed2i frame with pinhole camera model"""
-    assert uv.shape[0] == Z.shape[0]
-
-    # https://support.stereolabs.com/hc/en-us/articles/4554115218711-How-can-I-convert-3D-world-coordinates-to-2D-image-coordinates-and-viceversa
-    X = ((uv[:, 0] - cx) * Z) / (fx)
-    Y = ((uv[:, 1] - cy) * Z) / (fy)
-    return X, Y
-
-
-def uv2xyz(uv: np.ndarray, pcl: PointCloud2):
-    """Convert from pixel coordinates to 3D point with point cloud information
-
-    Resulting cartesian coordinates are consistent with the stereolabs frame of ref:
-    - https://docs.opencv.org/4.5.5/pinhole_camera_model.png
-    - https://www.stereolabs.com/docs/positional-tracking/coordinate-frames#selecting-a-coordinate-system
+def uv2xyz(uv: np.ndarray, Z: float):
     """
-    X, Y = uv2xy(, Z)
+    Conv pixel coords to world coords in zed2i frame with pinhole camera model
+    https://support.stereolabs.com/hc/en-us/articles/4554115218711-How-can-I-convert-3D-world-coordinates-to-2D-image-coordinates-and-viceversa
+    """
+    X = (uv[0] - cx) * Z / fx
+    Y = (uv[1] - cy) * Z / fy
+    return [X, Y, Z]
 
-    # positive & in_bounds & valid_z
-    return np.column_stack((X, Y, Z)), positive & in_bounds, valid_depth
+
+def get_cutting_data(bboxes: np.ndarray, kpts: np.ndarray, pcl: np.ndarray):
+    assert kpts.shape[1] == 15
+    return
+    # Xl, Yl = uv2xy(l_uv, z_of_cut)
+    # print(Xl)
+    # Xr, Yr = uv2xy(r_uv, z_of_cut)
+    # cut_diam = np.sqrt((Xr - Xl) ** 2 + (Yr - Yl) ** 2)
+
+    # # get the inclination of the tree w.r.t camera vertical axis
+    # ax1_uv = np.round(kpts[:, 9:11])[uv_mask][depth_mask]
+    # cut_uv = cut_uv[uv_mask][depth_mask]
+    # cut_incl_radians = uv2incl(ax1=ax1_uv, fc=cut_uv)
+
+    # return cut_XYZ, cut_diam, cut_incl_radians
 
 
 def uv2incl(ax1: np.ndarray, fc: np.ndarray) -> np.ndarray:
@@ -156,6 +155,29 @@ def pc2_msg(XYZ: np.ndarray, diam: np.ndarray, incl: np.ndarray) -> PointCloud2:
     ]
 
     return point_cloud2.create_cloud(header, fields, points)
+
+
+def point_markers(XYZ, frame_id="zed2i_left_camera_optical_frame"):
+    marker_array = MarkerArray()
+    for i, point in enumerate(XYZ):
+        marker = Marker()
+        marker.header.frame_id = frame_id
+        marker.type = Marker.SPHERE
+        marker.id = i * 2
+        marker.pose.position.x = point[0]
+        marker.pose.position.y = point[1]
+        marker.pose.position.z = point[2]
+        marker.scale.x = 0.2
+        marker.scale.y = 0.2
+        marker.scale.z = 0.2
+        marker.color.a = 1.0
+        marker.color.r = 0.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
+        quat = tf.transformations.quaternion_from_euler(0, 0, 1)
+        marker.pose.orientation = Quaternion(*quat)
+        marker_array.markers.append(marker)
+    return marker_array
 
 
 def markers(XYZ, diameters, inclinations, frame_id="zed2i_left_camera_optical_frame"):
@@ -189,6 +211,36 @@ def markers(XYZ, diameters, inclinations, frame_id="zed2i_left_camera_optical_fr
     return marker_array
 
 
+def pointcloud2_to_np(pcl: PointCloud2):
+    pc_array = ros_numpy.point_cloud2.pointcloud2_to_array(pcl)
+    xyz_array = np.vstack((pc_array["x"], pc_array["y"], pc_array["z"])).transpose()
+    return xyz_array
+
+
+class PointCloudTransformer:
+    def __init__(self):
+        # Initialize the tf2 buffer and listener once
+        self.tf_buffer = tf2_ros.Buffer()
+        self.listener = tf2_ros.TransformListener(self.tf_buffer)
+
+    def tf(self, cloud_in, from_frame, to_frame):
+        # Wait for the transform to be available
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                to_frame, from_frame, rospy.Time(0), rospy.Duration(1.0)
+            )
+            # Transform the point cloud
+            cloud_out = tf2_sensor_msgs.do_transform_cloud(cloud_in, transform)
+            return cloud_out
+        except (
+            tf2_ros.LookupException,
+            tf2_ros.ConnectivityException,
+            tf2_ros.ExtrapolationException,
+        ) as e:
+            rospy.logerr("Error transforming point cloud: %s" % str(e))
+            return None
+
+
 class CameraSubscriber:
     def __init__(self):
         package_path = rospkg.RosPack().get_path("treedet_ros")
@@ -213,6 +265,8 @@ class CameraSubscriber:
             self.lidar_callback,
         )
 
+        self.pcl_transformer = PointCloudTransformer()
+
         # Timer to process messages at a desired frequency (e.g., 1 Hz)
         self.timer = rospy.Timer(rospy.Duration(1 / RATE_LIMIT), self.timer_callback)
 
@@ -231,13 +285,20 @@ class CameraSubscriber:
                 rgb_msg: CompressedImage = self.data_buffer[0][-1]
                 rgb_img: np.ndarray = br.compressed_imgmsg_to_cv2(rgb_msg)
                 rgb_img = rgb_img[:, :, :3]  # cut out the alpha channel (bgra8 -> bgr8)
-                print(rgb_img.shape)
+
                 lidar_pcl: PointCloud2 = self.data_buffer[1][-1]
 
-                self.process(rgb_img, lidar_pcl)
+                lidar_pcl = self.pcl_transformer.tf(
+                    lidar_pcl, "PandarQT", "zed2i_left_camera_optical_frame"
+                )
+
+                if lidar_pcl:
+                    lidar_pcl: np.ndarray = pointcloud2_to_np(lidar_pcl)
+                    self.process(rgb_img, lidar_pcl)
+
                 self.data_buffer = ([], [])
 
-    def process(self, rgb_img: np.ndarray, pcl: PointCloud2):
+    def process(self, rgb_img: np.ndarray, pcl: np.ndarray):
         start_time = time.perf_counter()
         img, ratio = preprocess_rgb(rgb_img, (384, 672))
 
@@ -252,18 +313,40 @@ class CameraSubscriber:
         )
 
         bboxes, confs, kpts = get_detections(output[0], ratio)
-        cut_XYZ, diam, incl_radians = get_cutting_data(kpts, pcl)
+
+        # calculate the frustum points for each bbox corner
+        for bbox in bboxes:
+            frustum = np.array(
+                [
+                    uv2xyz(bbox[[0, 1]], Z_MIN),
+                    uv2xyz(bbox[[2, 1]], Z_MIN),
+                    uv2xyz(bbox[[0, 3]], Z_MIN),
+                    uv2xyz(bbox[[2, 3]], Z_MIN),
+                    uv2xyz(bbox[[0, 1]], Z_MAX),
+                    uv2xyz(bbox[[2, 1]], Z_MAX),
+                    uv2xyz(bbox[[0, 3]], Z_MAX),
+                    uv2xyz(bbox[[2, 3]], Z_MAX),
+                ]
+            )
+            # filter pointcloud for each frustum
+            hull = Delaunay(points=frustum)
+            inside = pcl[hull.find_simplex(pcl) >= 0]
+
+        # get_cutting_data(bboxes, kpts, pcl)
+        # cut_XYZ, diam, incl_radians =
         return
 
-        assert (
-            cut_XYZ.shape[0] == diam.shape[0]
-            and cut_XYZ.shape[0] == incl_radians.shape[0]
-        )
-        detection_pub.publish(pc2_msg(cut_XYZ, diam, incl_radians))
-        marker_pub.publish(markers(cut_XYZ, diam, incl_radians))
+        # assert (
+        #     cut_XYZ.shape[0] == diam.shape[0]
+        #     and cut_XYZ.shape[0] == incl_radians.shape[0]
+        # )
+        # detection_pub.publish(pc2_msg(cut_XYZ, diam, incl_radians))
+        # marker_pub.publish(markers(cut_XYZ, diam, incl_radians))
 
 
 if __name__ == "__main__":
     rospy.init_node("treedet_inference", anonymous=True)
+    rospy.set_param("/use_sim_time", True)
+
     rcs = CameraSubscriber()
     rospy.spin()
