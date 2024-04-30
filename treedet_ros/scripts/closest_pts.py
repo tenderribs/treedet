@@ -4,13 +4,11 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 from icp import icp
-from pcl import pcl, set_axes_equal
+from pcl import pc2 as pcl, kp2 as kpts, set_axes_equal
 
 # https://www.stereolabs.com/docs/positional-tracking/coordinate-frames
 
-
 pcl = pcl[pcl[:, 2] >= 3]  # reject too close points
-pcl = pcl[pcl[:, 2] <= 6]  # and the ones that are too far away (better axis scaling)
 
 P = np.array(
     [
@@ -25,19 +23,48 @@ fy = P[1, 1]
 cx = P[0, 2]
 cy = P[1, 2]
 
-kpt = np.array([122.42979, 283.6861])
-w = np.array([(kpt[0] - cx) / fx, (kpt[1] - cy) / fy, 1])
+
+def ray_vec(kpt: np.ndarray):
+    w = np.array([(kpt[0] - cx) / fx, (kpt[1] - cy) / fy, 1])
+    return w / np.linalg.norm(w)
 
 
-def create_shape():
-    # create a cylinder-like shape
-    radius = 0.2
-    height = 1.5
-    part = 0.33  # fully extruded cylinder -> part = 1. But ex. only want half-circle -> part = 0.5
+def ray(vec: np.ndarray):
+    assert vec.shape[0] == 3
+    meters = 20
+    return np.array(
+        [
+            vec[0] * np.linspace(0, meters, meters * 10),
+            vec[1] * np.linspace(0, meters, meters * 10),
+            vec[2] * np.linspace(0, meters, meters * 10),
+        ]
+    ).T
 
-    x = radius * np.cos(np.linspace(0, part * 2 * np.pi, 30))
-    z = radius * np.sin(np.linspace(0, part * 2 * np.pi, 30))
-    heights = np.linspace(0, -height, 30)
+
+def estimate_3d(pcl, ray_vec):
+    pcl = np.array(  # sort points based on distance to ray vector
+        sorted(
+            list(pcl),
+            key=lambda p: np.linalg.norm(np.cross(p, ray_vec)),
+        )
+    )
+
+    # start off with inital guess of where the kpt is:
+    closest = pcl[:4, :]
+    return np.mean(closest, axis=0)  # return the centroid
+
+
+def create_cylinder(radius=0.3, height=4, part=0.2):
+    """
+    create a cylinder-like shape
+    part: fully extruded cylinder -> part = 1. But ex. only want half-circle -> part = 0.5
+    """
+    print(f"radius: {radius}")
+    print(f"height: {height}")
+
+    z = radius * np.sin(np.linspace(0, 2 * part * np.pi, int(radius * 40)))
+    x = radius * np.cos(np.linspace(0, 2 * part * np.pi, int(radius * 40)))
+    heights = np.linspace(0, -int(height), int(height * 15))
 
     # assemble the cylinder by stacking rings at each height
     cylinder = np.array([]).reshape(-1, 3)
@@ -47,35 +74,81 @@ def create_shape():
     return cylinder
 
 
-shape = create_shape()
+w_fc = ray_vec(kpts[0:2])
+w_l = ray_vec(kpts[3:5])
+w_r = ray_vec(kpts[6:8])
+w_ax1 = ray_vec(kpts[9:11])
+w_ax2 = ray_vec(kpts[12:14])
 
 # the projection ray from the camera matrix:
-ray = np.array(
+ray_fc = ray(w_fc)
+ray_l = ray(w_l)
+ray_r = ray(w_r)
+ray_ax1 = ray(w_ax1)
+ray_ax2 = ray(w_ax2)
+
+# calculate the width of the tree based on initial estimate
+radius = np.sqrt(np.sum((estimate_3d(pcl, ray_l) - estimate_3d(pcl, ray_r)) ** 2)) / 2
+
+# calculate height
+height = np.sqrt(np.sum((estimate_3d(pcl, ray_fc) - estimate_3d(pcl, ray_ax2)) ** 2))
+
+# calculate the 3D rotation matrix to rotate (0, -1, 0) to to tree orientation
+init_vec = np.array([0, -1, 0])
+
+fc3d = estimate_3d(pcl, w_fc)
+
+incl_vec = estimate_3d(pcl, w_ax1) - fc3d
+incl_vec /= np.linalg.norm(incl_vec)
+
+rot_axis = np.cross(init_vec, incl_vec)
+rot_axis /= np.linalg.norm(rot_axis)
+
+cos_theta = np.dot(init_vec, incl_vec)
+theta = np.arccos(cos_theta)
+
+# Rodrigues' rotation formula to find the rotation matrix
+K = np.array(
     [
-        w[0] * np.linspace(0, 5, 100),
-        w[1] * np.linspace(0, 5, 100),
-        w[2] * np.linspace(0, 5, 100),
+        [0, -rot_axis[2], rot_axis[1]],
+        [rot_axis[2], 0, -rot_axis[0]],
+        [-rot_axis[1], rot_axis[0], 0],
     ]
-).T
-
-print(f"ray.shape: {ray.shape}")
-print(f"pcl.shape: {pcl.shape}")
-
-# sort points based on distance to ray vector
-pcl = np.array(
-    sorted(
-        list(pcl),
-        key=lambda p: np.linalg.norm(np.cross(p, w)) / np.linalg.norm(w),
-    )
 )
 
-closest = pcl[:10, :]
-rest = pcl[10:, :]
+R = np.eye(3) + np.sin(theta) * K + (1 - np.cos(theta)) * np.dot(K, K)
 
-guess = np.mean(closest, axis=0)
-print(guess)
-# get the distances:
-# distances = np.array([np.linalg.norm(np.cross(p, w)) / np.linalg.norm(w) for p in rest])
+print(R)
+
+cylinder = create_cylinder(radius=radius, height=height)
+
+# ensure that equal number of points in pcl and cylinder
+if cylinder.shape[0] > pcl.shape[0]:
+    cylinder = cylinder[: pcl.shape[0], :]
+
+if pcl.shape[0] > cylinder.shape[0]:
+    # only keep the points closest to the cutting keypoint
+    pcl = pcl[: cylinder.shape[0], :]
+
+# find initial guess for T as centroid of the pcl with rotation based on the camera projection matrix:
+init = np.array(
+    [
+        [1, 0, 0, fc3d[0]],
+        [0, 1, 0, fc3d[1]],  # move up a bit to prevent
+        [0, 0, 1, fc3d[2]],
+        [0, 0, 0, 1],
+    ]
+)
+init[:3, :3] = R
+init_guess = np.column_stack([cylinder, np.ones(cylinder.shape[0])])
+init_guess = (init @ init_guess.T).T
+
+
+T, distances, iters = icp(cylinder, pcl, init_pose=None, tolerance=1e-4)
+cylinder_tf = np.column_stack([cylinder, np.ones(cylinder.shape[0])])
+cylinder_tf = (T @ cylinder_tf.T).T
+
+print(f"ran ICP in {iters} iters")
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection="3d")
@@ -83,12 +156,13 @@ ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.set_zlabel("Z")
 
-ax.scatter(ray[:, 0], ray[:, 1], ray[:, 2], label="ray")
-ax.scatter(shape[:, 0], shape[:, 1], shape[:, 2], label="shape")
-ax.scatter(pcl[:, 0], pcl[:, 1], pcl[:, 2])
-# ax.scatter(rest[:, 0], rest[:, 1], rest[:, 2], c=distances, cmap="Greens_r")
-ax.scatter(guess[0], guess[1], guess[2], color="#d62728", marker="x", s=400)
-set_axes_equal(ax)
+ax.scatter(cylinder[:, 0], cylinder[:, 1], cylinder[:, 2], label="Cylinder")
+ax.scatter(init_guess[:, 0], init_guess[:, 1], init_guess[:, 2], label="Initial guess")
+ax.scatter(
+    cylinder_tf[:, 0], cylinder_tf[:, 1], cylinder_tf[:, 2], label="Cylinder  tf"
+)
+ax.scatter(pcl[:, 0], pcl[:, 1], pcl[:, 2], label="Filtered LiDAR pcl")
 
+# set_axes_equal(ax)
 ax.legend()
 plt.show()
