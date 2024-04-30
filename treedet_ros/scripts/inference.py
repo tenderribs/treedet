@@ -21,8 +21,7 @@ from geometry_msgs.msg import Quaternion
 from visualization_msgs.msg import Marker, MarkerArray
 from scipy.spatial import Delaunay
 
-# process incoming images at given frequency:
-RATE_LIMIT = 10.0
+RATE_LIMIT = 10.0  # process incoming images at given frequency
 
 br = CvBridge()
 
@@ -116,22 +115,6 @@ def uv2xyz(uv: np.ndarray, Z: float):
     return [X, Y, Z]
 
 
-def get_cutting_data(bboxes: np.ndarray, kpts: np.ndarray, pcl: np.ndarray):
-    assert kpts.shape[1] == 15
-    return
-    # Xl, Yl = uv2xy(l_uv, z_of_cut)
-    # print(Xl)
-    # Xr, Yr = uv2xy(r_uv, z_of_cut)
-    # cut_diam = np.sqrt((Xr - Xl) ** 2 + (Yr - Yl) ** 2)
-
-    # # get the inclination of the tree w.r.t camera vertical axis
-    # ax1_uv = np.round(kpts[:, 9:11])[uv_mask][depth_mask]
-    # cut_uv = cut_uv[uv_mask][depth_mask]
-    # cut_incl_radians = uv2incl(ax1=ax1_uv, fc=cut_uv)
-
-    # return cut_XYZ, cut_diam, cut_incl_radians
-
-
 def uv2incl(ax1: np.ndarray, fc: np.ndarray) -> np.ndarray:
     """Get counter-clockwise inclination in radians of tree w.r.t the "upwards" vertical axis"""
     du = fc[:, 0] - ax1[:, 0]
@@ -139,7 +122,38 @@ def uv2incl(ax1: np.ndarray, fc: np.ndarray) -> np.ndarray:
     return -(np.pi / 2 + np.arctan2(du, dv))
 
 
-def pc2_msg(XYZ: np.ndarray, diam: np.ndarray, incl: np.ndarray) -> PointCloud2:
+def get_cutting_data(bboxes: np.ndarray, kpts: np.ndarray, pcl: np.ndarray):
+    assert bboxes.shape[0] == kpts.shape[0]  # sanity checks
+    assert bboxes.shape[1] == 4 and kpts.shape[1] == 15 and pcl.shape[1] == 3
+
+    # get the inclination of the cut in degrees
+    cut_uv = kpts[:, 0:2]
+    ax1_uv = kpts[:, 9:11]
+    incl_radians = uv2incl(ax1=ax1_uv, fc=cut_uv)
+
+    # fit cylinder to each bbox
+    for bbox, kpts, incl in zip(bboxes, kpts, incl_radians):
+        frustum = np.array(  # calculate the frustum points for each bbox corner
+            [
+                uv2xyz(bbox[[0, 1]], Z_MIN),
+                uv2xyz(bbox[[2, 1]], Z_MIN),
+                uv2xyz(bbox[[0, 3]], Z_MIN),
+                uv2xyz(bbox[[2, 3]], Z_MIN),
+                uv2xyz(bbox[[0, 1]], Z_MAX),
+                uv2xyz(bbox[[2, 1]], Z_MAX),
+                uv2xyz(bbox[[0, 3]], Z_MAX),
+                uv2xyz(bbox[[2, 3]], Z_MAX),
+            ]
+        )
+
+        # filter pointcloud for each frustum (only search pcl within)
+        hull = Delaunay(points=frustum)
+        inside = pcl[hull.find_simplex(pcl) >= 0]
+
+
+def pc2_msg(
+    XYZ: np.ndarray,
+) -> PointCloud2:
     header = rospy.Header(
         frame_id="zed2i_left_camera_optical_frame", stamp=rospy.Time.now()
     )
@@ -147,12 +161,10 @@ def pc2_msg(XYZ: np.ndarray, diam: np.ndarray, incl: np.ndarray) -> PointCloud2:
         PointField("x", 0, PointField.FLOAT32, 1),
         PointField("y", 4, PointField.FLOAT32, 1),
         PointField("z", 8, PointField.FLOAT32, 1),
-        PointField("diam", 12, PointField.FLOAT32, 1),
-        PointField("incl", 16, PointField.FLOAT32, 1),
+        # PointField("diam", 12, PointField.FLOAT32, 1),
+        # PointField("incl", 16, PointField.FLOAT32, 1),
     ]
-    points = [
-        (xyz[0], xyz[1], xyz[2], diam, incl) for xyz, diam, incl in zip(XYZ, diam, incl)
-    ]
+    points = [(xyz[0], xyz[1], xyz[2]) for xyz in XYZ]
 
     return point_cloud2.create_cloud(header, fields, points)
 
@@ -182,9 +194,7 @@ def point_markers(XYZ, frame_id="zed2i_left_camera_optical_frame"):
 
 def markers(XYZ, diameters, inclinations, frame_id="zed2i_left_camera_optical_frame"):
     marker_array = MarkerArray()
-    # delete_marker = Marker()
-    # delete_marker.action = Marker.DELETEALL
-    # marker_array.markers.append(delete_marker)
+
     for i, (point, diameter, inclination) in enumerate(
         zip(XYZ, diameters, inclinations)
     ):
@@ -299,47 +309,19 @@ class CameraSubscriber:
                 self.data_buffer = ([], [])
 
     def process(self, rgb_img: np.ndarray, pcl: np.ndarray):
-        start_time = time.perf_counter()
-        img, ratio = preprocess_rgb(rgb_img, (384, 672))
-
-        print(f"preproc:\t{round((time.perf_counter() - start_time) * 1000, 3)} ms")
-
         # pass image through model
+        img, ratio = preprocess_rgb(rgb_img, (384, 672))
         ort_inputs = {self.session.get_inputs()[0].name: img[None, :, :, :]}
         output = self.session.run(None, ort_inputs)
 
-        print(
-            f"preproc + inf:\t{round((time.perf_counter() - start_time) * 1000, 3)} ms"
-        )
-
+        start = time.perf_counter()
         bboxes, confs, kpts = get_detections(output[0], ratio)
+        print(f"get_detections:\t{round((time.perf_counter() - start) * 1000, 3)} ms")
 
-        # calculate the frustum points for each bbox corner
-        for bbox in bboxes:
-            frustum = np.array(
-                [
-                    uv2xyz(bbox[[0, 1]], Z_MIN),
-                    uv2xyz(bbox[[2, 1]], Z_MIN),
-                    uv2xyz(bbox[[0, 3]], Z_MIN),
-                    uv2xyz(bbox[[2, 3]], Z_MIN),
-                    uv2xyz(bbox[[0, 1]], Z_MAX),
-                    uv2xyz(bbox[[2, 1]], Z_MAX),
-                    uv2xyz(bbox[[0, 3]], Z_MAX),
-                    uv2xyz(bbox[[2, 3]], Z_MAX),
-                ]
-            )
-            # filter pointcloud for each frustum
-            hull = Delaunay(points=frustum)
-            inside = pcl[hull.find_simplex(pcl) >= 0]
+        start = time.perf_counter()
+        cut_XYZ, diam, incl_radians = get_cutting_data(bboxes, kpts, pcl)
+        print(f"get_cutting_data:\t{round((time.perf_counter() - start) * 1000, 3)} ms")
 
-        # get_cutting_data(bboxes, kpts, pcl)
-        # cut_XYZ, diam, incl_radians =
-        return
-
-        # assert (
-        #     cut_XYZ.shape[0] == diam.shape[0]
-        #     and cut_XYZ.shape[0] == incl_radians.shape[0]
-        # )
         # detection_pub.publish(pc2_msg(cut_XYZ, diam, incl_radians))
         # marker_pub.publish(markers(cut_XYZ, diam, incl_radians))
 
