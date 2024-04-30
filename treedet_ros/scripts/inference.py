@@ -89,6 +89,24 @@ def transform_point_cloud(tf_buffer, pcl, frame_id="zed2i_left_camera_optical_fr
         return None
 
 
+def pc2_msg(
+    XYZ: np.ndarray,
+) -> PointCloud2:
+    header = rospy.Header(
+        frame_id="zed2i_left_camera_optical_frame", stamp=rospy.Time.now()
+    )
+    fields = [
+        PointField("x", 0, PointField.FLOAT32, 1),
+        PointField("y", 4, PointField.FLOAT32, 1),
+        PointField("z", 8, PointField.FLOAT32, 1),
+        # PointField("diam", 12, PointField.FLOAT32, 1),
+        # PointField("incl", 16, PointField.FLOAT32, 1),
+    ]
+    points = [(xyz[0], xyz[1], xyz[2]) for xyz in XYZ]
+
+    return point_cloud2.create_cloud(header, fields, points)
+
+
 def get_detections(raw_dets: list, rescale_ratio: float):
     """
     Get filtered detections in scaling of original rgb and depth image
@@ -128,6 +146,7 @@ def get_cutting_data(bboxes: np.ndarray, kpts: np.ndarray, pcl: np.ndarray):
 
     # get the inclination of the cut in degrees
     cut_uv = kpts[:, 0:2]
+    print(cut_uv)
     ax1_uv = kpts[:, 9:11]
     incl_radians = uv2incl(ax1=ax1_uv, fc=cut_uv)
 
@@ -149,24 +168,8 @@ def get_cutting_data(bboxes: np.ndarray, kpts: np.ndarray, pcl: np.ndarray):
         # filter pointcloud for each frustum (only search pcl within)
         hull = Delaunay(points=frustum)
         inside = pcl[hull.find_simplex(pcl) >= 0]
-
-
-def pc2_msg(
-    XYZ: np.ndarray,
-) -> PointCloud2:
-    header = rospy.Header(
-        frame_id="zed2i_left_camera_optical_frame", stamp=rospy.Time.now()
-    )
-    fields = [
-        PointField("x", 0, PointField.FLOAT32, 1),
-        PointField("y", 4, PointField.FLOAT32, 1),
-        PointField("z", 8, PointField.FLOAT32, 1),
-        # PointField("diam", 12, PointField.FLOAT32, 1),
-        # PointField("incl", 16, PointField.FLOAT32, 1),
-    ]
-    points = [(xyz[0], xyz[1], xyz[2]) for xyz in XYZ]
-
-    return point_cloud2.create_cloud(header, fields, points)
+        print(inside)
+        detection_pub.publish(pc2_msg(inside))
 
 
 def point_markers(XYZ, frame_id="zed2i_left_camera_optical_frame"):
@@ -310,19 +313,18 @@ class CameraSubscriber:
 
     def process(self, rgb_img: np.ndarray, pcl: np.ndarray):
         # pass image through model
+        start = time.perf_counter()
         img, ratio = preprocess_rgb(rgb_img, (384, 672))
         ort_inputs = {self.session.get_inputs()[0].name: img[None, :, :, :]}
         output = self.session.run(None, ort_inputs)
 
-        start = time.perf_counter()
         bboxes, confs, kpts = get_detections(output[0], ratio)
-        print(f"get_detections:\t{round((time.perf_counter() - start) * 1000, 3)} ms")
+        print(f"get_detections:  \t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
         start = time.perf_counter()
-        cut_XYZ, diam, incl_radians = get_cutting_data(bboxes, kpts, pcl)
-        print(f"get_cutting_data:\t{round((time.perf_counter() - start) * 1000, 3)} ms")
+        get_cutting_data(bboxes, kpts, pcl)
+        print(f"get_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
-        # detection_pub.publish(pc2_msg(cut_XYZ, diam, incl_radians))
         # marker_pub.publish(markers(cut_XYZ, diam, incl_radians))
 
 
