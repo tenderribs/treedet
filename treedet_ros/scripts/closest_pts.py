@@ -54,17 +54,19 @@ def estimate_3d(pcl, ray_vec):
     return np.mean(closest, axis=0)  # return the centroid
 
 
-def create_cylinder(radius=0.3, height=4, part=0.2):
+def create_cylinder(radius=0.3, height=4, num_pts=50, part=0.2):
     """
     create a cylinder-like shape
     part: fully extruded cylinder -> part = 1. But ex. only want half-circle -> part = 0.5
     """
     print(f"radius: {radius}")
     print(f"height: {height}")
+    print(f"num_pts: {num_pts}")
 
-    z = radius * np.sin(np.linspace(0, 2 * part * np.pi, int(radius * 40)))
-    x = radius * np.cos(np.linspace(0, 2 * part * np.pi, int(radius * 40)))
-    heights = np.linspace(0, -int(height), int(height * 15))
+    # Getting a good fit works best when you have roughly num_pts same as pcl point count
+    z = radius * np.sin(np.linspace(0, 2 * part * np.pi, 4))
+    x = radius * np.cos(np.linspace(0, 2 * part * np.pi, 4))
+    heights = np.linspace(0, -height, int(num_pts / 4))
 
     # assemble the cylinder by stacking rings at each height
     cylinder = np.array([]).reshape(-1, 3)
@@ -120,7 +122,7 @@ R = np.eye(3) + np.sin(theta) * K + (1 - np.cos(theta)) * np.dot(K, K)
 
 print(R)
 
-cylinder = create_cylinder(radius=radius, height=height)
+cylinder = create_cylinder(radius=radius, height=height, num_pts=pcl.shape[0])
 
 # ensure that equal number of points in pcl and cylinder
 if cylinder.shape[0] > pcl.shape[0]:
@@ -156,7 +158,6 @@ ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.set_zlabel("Z")
 
-ax.scatter(cylinder[:, 0], cylinder[:, 1], cylinder[:, 2], label="Cylinder")
 ax.scatter(init_guess[:, 0], init_guess[:, 1], init_guess[:, 2], label="Initial guess")
 ax.scatter(
     cylinder_tf[:, 0], cylinder_tf[:, 1], cylinder_tf[:, 2], label="Cylinder  tf"
