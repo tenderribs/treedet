@@ -2,7 +2,11 @@
 <launch>
 	<arg name="rviz_config_file" default="$(find treedet_ros)/rviz/view_dets.rviz" />
 
+	<!-- run self-filtering on lidar pcl -->
+	<include file="$(find harveri_description)/launch/load.launch" />
+	<include file="$(find harveri_mapping)/launch/harveri_self_see_filter.launch" />
+
 	<!-- Launch tree_detection node -->
-	<node name="inference.py" pkg="treedet_ros" type="inference.py" output="screen" />
+	<!-- <node name="inference.py" pkg="treedet_ros" type="inference.py" output="screen" /> -->
 	<node name="rviz_tree_detection" pkg="rviz" type="rviz" args="-d $(arg rviz_config_file)" required="true"/>
 </launch>
