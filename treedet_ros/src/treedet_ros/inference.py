@@ -8,20 +8,22 @@ import cv2
 import time
 import tf2_ros
 import tf2_sensor_msgs
-import tf.transformations
+
+# import tf.transformations
 import ros_numpy
 
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CompressedImage
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
-from geometry_msgs.msg import Quaternion
+
+# from geometry_msgs.msg import Quaternion
 
 from visualization_msgs.msg import Marker, MarkerArray
 
 from treedet_ros.cutting_data import get_cutting_data
 
-RATE_LIMIT = 10.0  # process incoming images at given frequency
+RATE_LIMIT = 5.0  # process incoming images at given frequency
 
 br = CvBridge()
 
@@ -84,30 +86,30 @@ def get_detections(raw_dets: list, rescale_ratio: float):
     return raw_dets[:, :4], raw_dets[:, 4], raw_dets[:, 6:]
 
 
-def point_markers(XYZ, frame_id="zed2i_left_camera_optical_frame"):
-    marker_array = MarkerArray()
-    for i, point in enumerate(XYZ):
-        marker = Marker()
-        marker.header.frame_id = frame_id
-        marker.type = Marker.SPHERE
-        marker.id = i * 2
-        marker.pose.position.x = point[0]
-        marker.pose.position.y = point[1]
-        marker.pose.position.z = point[2]
-        marker.scale.x = 0.2
-        marker.scale.y = 0.2
-        marker.scale.z = 0.2
-        marker.color.a = 1.0
-        marker.color.r = 0.0
-        marker.color.g = 0.0
-        marker.color.b = 1.0
-        quat = tf.transformations.quaternion_from_euler(0, 0, 1)
-        marker.pose.orientation = Quaternion(*quat)
-        marker_array.markers.append(marker)
-    return marker_array
+# def point_markers(XYZ, frame_id="zed2i_left_camera_optical_frame"):
+#     marker_array = MarkerArray()
+#     for i, point in enumerate(XYZ):
+#         marker = Marker()
+#         marker.header.frame_id = frame_id
+#         marker.type = Marker.SPHERE
+#         marker.id = i * 2
+#         marker.pose.position.x = point[0]
+#         marker.pose.position.y = point[1]
+#         marker.pose.position.z = point[2]
+#         marker.scale.x = 0.2
+#         marker.scale.y = 0.2
+#         marker.scale.z = 0.2
+#         marker.color.a = 1.0
+#         marker.color.r = 0.0
+#         marker.color.g = 0.0
+#         marker.color.b = 1.0
+#         # quat = tf.transformations.quaternion_from_euler(0, 0, 1)
+#         # marker.pose.orientation = Quaternion(*quat)
+#         marker_array.markers.append(marker)
+#     return marker_array
 
 
-def markers(XYZ, dims, frame_id="BASE"):
+def np_to_markers(XYZ, dims, frame_id):
     marker_array = MarkerArray()
 
     for i, (point, dim) in enumerate(zip(XYZ, dims)):
@@ -126,8 +128,8 @@ def markers(XYZ, dims, frame_id="BASE"):
         m.color.r = 1.0
         m.color.g = 0.0
         m.color.b = 0.0
-        quat = tf.transformations.quaternion_from_euler(0, 0, -np.pi / 2)
-        m.pose.orientation = Quaternion(*quat)
+        # quat = tf.transformations.quaternion_from_euler(0, 0, np.pi / 2)
+        # m.pose.orientation = Quaternion(*quat)
 
         marker_array.markers.append(m)
     return marker_array
@@ -158,7 +160,7 @@ class PointCloudTransformer:
             tf2_ros.ConnectivityException,
             tf2_ros.ExtrapolationException,
         ) as e:
-            rospy.logerror("Error transforming point cloud: %s" % str(e))
+            rospy.logerr("Error transforming point cloud: %s" % str(e))
             return None
 
 
@@ -236,9 +238,9 @@ class CameraSubscriber:
 
         out_pcd = np_to_pcd2(cut_xyz)
         out_pcd = self.pcl_transformer.tf(
-            out_pcd, "zed2i_left_camera_optical_frame", "PandarQT"
+            out_pcd, "zed2i_left_camera_optical_frame", "BASE"
         )
-        marker_pub.publish(markers(pc2_to_np(out_pcd), cut_diam))
+        marker_pub.publish(np_to_markers(pc2_to_np(out_pcd), cut_diam, "BASE"))
 
         print()
 

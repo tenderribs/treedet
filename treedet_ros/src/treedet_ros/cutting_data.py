@@ -83,8 +83,8 @@ def estimate_3d(pcl: np.ndarray, ray_vec: np.ndarray):
         )
     )
 
-    # start off with inital guess of where the kpt is. 3 small number because far away tree pcls don't have many points
-    closest = pcl[:3, :]
+    # start off with inital guess of where the kpt is. 2 small number because far away tree pcls don't have many points
+    closest = pcl[:4, :]
     return np.mean(closest, axis=0)  # return the centroid
 
 
@@ -130,12 +130,17 @@ def project_2dto3d(kpts: np.ndarray, pcl: np.ndarray):
 def create_cylinder(radius=0.3, height=4, num_pts=50, part=0.3):
     """
     create a cylinder-like shape
-    part: fully extruded cylinder -> part = 1. But ex. only want half-circle -> set part = 0.5
+    part: fully extruded cylinder -> part = 1. But ex. only want half-circle -> part = 0.5
     """
-    # Getting a good fit works best when you have roughly num_pts same as pcl point count
-    z = radius * np.sin(np.linspace(0, 2 * part * np.pi, 4))
-    x = radius * np.cos(np.linspace(0, 2 * part * np.pi, 4))
-    heights = np.linspace(0, -height, int(num_pts / 4))
+    rim_points = round(0.5 * np.sqrt(num_pts))
+
+    phi = 2.0 * np.pi * part
+    rot_offset = -0.5 * (phi + np.pi)  # add offset so that cylinder faces camera
+    rim = np.linspace(0, phi, rim_points) + rot_offset
+    z = radius * np.sin(rim)
+    x = radius * np.cos(rim)
+
+    heights = np.linspace(0, -height, int(num_pts / rim_points))
 
     # assemble the cylinder by stacking rings at each height
     cylinder = np.array([]).reshape(-1, 3)
@@ -173,7 +178,9 @@ def do_fit_cylinder(kpts: np.ndarray, pcl: np.ndarray):
 
     R = np.eye(3) + np.sin(theta) * K + (1 - np.cos(theta)) * np.dot(K, K)
 
-    cylinder = create_cylinder(radius=radius, height=height, num_pts=pcl.shape[0])
+    cylinder = create_cylinder(
+        radius=radius, height=height, num_pts=pcl.shape[0] * 0.75
+    )
 
     # ensure that equal number of points in pcl and cylinder
     if cylinder.shape[0] > pcl.shape[0]:
@@ -194,7 +201,7 @@ def do_fit_cylinder(kpts: np.ndarray, pcl: np.ndarray):
     )
     init_pose[:3, :3] = R  # insert rotation
 
-    T, _, iters = icp(cylinder, pcl, init_pose=init_pose, tolerance=1e-3)
+    T, _, iters = icp(cylinder, pcl, init_pose=init_pose, tolerance=1e-2)
     cylinder_tf = np.column_stack([cylinder, np.ones(cylinder.shape[0])])
     cylinder_tf = (T @ cylinder_tf.T).T
 
@@ -220,6 +227,10 @@ def get_cutting_data(
 
     cut_xyzs, dim_xyzs = [], []
 
+    pcl = pcl[
+        pcl[:, 2] >= 3
+    ]  # reject too close points or behind camera (reduces search space)
+
     # fit cylinder to each bbox
     for bbox, kpts in zip(bboxes, kpts):  # , incl , incl_radians
         frustum = np.array(  # calculate the frustum points for each bbox corner
@@ -238,8 +249,6 @@ def get_cutting_data(
         # filter pointcloud for each frustum (only search pcl within)
         hull = Delaunay(points=frustum)
         inside = pcl[hull.find_simplex(pcl) >= 0]
-
-        inside = inside[inside[:, 2] >= 2]  # reject too close points
 
         # fit a cylinder to the points inside
         if fit_cylinder:
