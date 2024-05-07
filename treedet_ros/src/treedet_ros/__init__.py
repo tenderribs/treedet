@@ -1,3 +1,3 @@
 from .inference import main
-from .fit_cylinder import fit_cylinder
+from .cutting_data import get_cutting_data
 from .icp import icp
