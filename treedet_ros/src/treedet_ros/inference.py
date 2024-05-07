@@ -18,33 +18,12 @@ from sensor_msgs import point_cloud2
 from geometry_msgs.msg import Quaternion
 
 from visualization_msgs.msg import Marker, MarkerArray
-from scipy.spatial import Delaunay
 
-print("importing fit_cylinder from Python package treedet_ros in inference.py")
-from treedet_ros.fit_cylinder import fit_cylinder
+from treedet_ros.cutting_data import get_cutting_data
 
 RATE_LIMIT = 10.0  # process incoming images at given frequency
 
 br = CvBridge()
-
-
-# taken from P matrix published by /zed2i/zed_node/depth/camera_info
-P = np.array(
-    [
-        [486.89678955078125, 0.0, 325.613525390625, 0.0],
-        [0.0, 486.89678955078125, 189.09512329101562, 0.0],
-        [0.0, 0.0, 1.0, 0.0],
-    ]
-)
-
-fx = P[0, 0]
-fy = P[1, 1]
-cx = P[0, 2]
-cy = P[1, 2]
-
-# depth limits of the frustum
-Z_MIN = 0.1
-Z_MAX = 20
 
 detection_pub = rospy.Publisher("/tree_det/felling_cut", PointCloud2, queue_size=10)
 marker_pub = rospy.Publisher("/tree_det/markers", MarkerArray, queue_size=10)
@@ -73,25 +52,7 @@ def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
     return np.ascontiguousarray(padded_img, dtype=np.float32), r
 
 
-def transform_point_cloud(tf_buffer, pcl, frame_id="zed2i_left_camera_optical_frame"):
-    try:
-        trans = tf_buffer.lookup_transform(
-            frame_id,
-            pcl.header.frame_id,
-            rospy.Time(0),
-            rospy.Duration(1.0),
-        )
-        return tf2_sensor_msgs.do_transform_cloud(pcl, trans)
-    except (
-        tf2_ros.LookupException,
-        tf2_ros.ConnectivityException,
-        tf2_ros.ExtrapolationException,
-    ):
-        rospy.logerror("sth wrong with tf")
-        return None
-
-
-def pc2_msg(
+def np_to_pcd2(
     XYZ: np.ndarray,
 ) -> PointCloud2:
     header = rospy.Header(
@@ -101,8 +62,6 @@ def pc2_msg(
         PointField("x", 0, PointField.FLOAT32, 1),
         PointField("y", 4, PointField.FLOAT32, 1),
         PointField("z", 8, PointField.FLOAT32, 1),
-        # PointField("diam", 12, PointField.FLOAT32, 1),
-        # PointField("incl", 16, PointField.FLOAT32, 1),
     ]
     points = [(xyz[0], xyz[1], xyz[2]) for xyz in XYZ]
 
@@ -114,7 +73,7 @@ def get_detections(raw_dets: list, rescale_ratio: float):
     Get filtered detections in scaling of original rgb and depth image
     """
     # filter uncertain bad detections
-    raw_dets = raw_dets[raw_dets[:, 4] >= 0.9]
+    raw_dets = raw_dets[raw_dets[:, 4] >= 0.85]
 
     # rescale bbox and kpts w.r.t original image
     raw_dets[:, :4] /= rescale_ratio
@@ -123,60 +82,6 @@ def get_detections(raw_dets: list, rescale_ratio: float):
 
     # kpts in format "kpC", "kpL", "kpL", "ax1", "ax2" and each kpt gets (x, y, conf)
     return raw_dets[:, :4], raw_dets[:, 4], raw_dets[:, 6:]
-
-
-def uv2xyz(uv: np.ndarray, Z: float):
-    """
-    Conv pixel coords to world coords in zed2i frame with pinhole camera model
-    https://support.stereolabs.com/hc/en-us/articles/4554115218711-How-can-I-convert-3D-world-coordinates-to-2D-image-coordinates-and-viceversa
-    """
-    X = (uv[0] - cx) * Z / fx
-    Y = (uv[1] - cy) * Z / fy
-    return [X, Y, Z]
-
-
-def uv2incl(ax1: np.ndarray, fc: np.ndarray) -> np.ndarray:
-    """Get counter-clockwise inclination in radians of tree w.r.t the "upwards" vertical axis"""
-    du = fc[:, 0] - ax1[:, 0]
-    dv = fc[:, 1] - ax1[:, 1]
-    return -(np.pi / 2 + np.arctan2(du, dv))
-
-
-def get_cutting_data(bboxes: np.ndarray, kpts: np.ndarray, pcl: np.ndarray):
-    assert bboxes.shape[0] == kpts.shape[0]  # sanity checks
-    assert bboxes.shape[1] == 4 and kpts.shape[1] == 15 and pcl.shape[1] == 3
-
-    # get the inclination of the cut in degrees
-    cut_uv = kpts[:, 0:2]
-    print(cut_uv)
-    ax1_uv = kpts[:, 9:11]
-    incl_radians = uv2incl(ax1=ax1_uv, fc=cut_uv)
-
-    # fit cylinder to each bbox
-    for bbox, kpts, incl in zip(bboxes, kpts, incl_radians):
-        frustum = np.array(  # calculate the frustum points for each bbox corner
-            [
-                uv2xyz(bbox[[0, 1]], Z_MIN),
-                uv2xyz(bbox[[2, 1]], Z_MIN),
-                uv2xyz(bbox[[0, 3]], Z_MIN),
-                uv2xyz(bbox[[2, 3]], Z_MIN),
-                uv2xyz(bbox[[0, 1]], Z_MAX),
-                uv2xyz(bbox[[2, 1]], Z_MAX),
-                uv2xyz(bbox[[0, 3]], Z_MAX),
-                uv2xyz(bbox[[2, 3]], Z_MAX),
-            ]
-        )
-
-        # filter pointcloud for each frustum (only search pcl within)
-        hull = Delaunay(points=frustum)
-        inside = pcl[hull.find_simplex(pcl) >= 0]
-
-        # try to fit a cylinder to the points inside
-        height, tree_radius, T_matrix = fit_cylinder(kpts, inside, P)
-        print(f"height: {height}")
-        print(f"tree_radius: {tree_radius}")
-        print(f"T_matrix: {T_matrix}")
-        # detection_pub.publish(pc2_msg(inside))
 
 
 def point_markers(XYZ, frame_id="zed2i_left_camera_optical_frame"):
@@ -202,36 +107,33 @@ def point_markers(XYZ, frame_id="zed2i_left_camera_optical_frame"):
     return marker_array
 
 
-def markers(XYZ, diameters, inclinations, frame_id="zed2i_left_camera_optical_frame"):
+def markers(XYZ, dims, frame_id="BASE"):
     marker_array = MarkerArray()
 
-    for i, (point, diameter, inclination) in enumerate(
-        zip(XYZ, diameters, inclinations)
-    ):
-        # Orientation Marker (Arrow)
-        orient_marker = Marker()
-        orient_marker.header.frame_id = frame_id
-        orient_marker.type = Marker.ARROW
-        orient_marker.action = Marker.ADD
-        orient_marker.id = i * 2
-        orient_marker.scale.x = 1  # Shaft length
-        orient_marker.scale.y = 0.1  # Head diameter
-        orient_marker.scale.z = 0.1  # Head length
-        orient_marker.color.a = 1.0
-        orient_marker.color.r = 1.0
-        orient_marker.color.g = 0.0
-        orient_marker.color.b = 0.0
-        orient_marker.pose.position.x = point[0]
-        orient_marker.pose.position.y = point[1]
-        orient_marker.pose.position.z = point[2]
-        # Convert inclination to quaternion for roll axis (Z-axis rotation)
-        quat = tf.transformations.quaternion_from_euler(0, 0, inclination)
-        orient_marker.pose.orientation = Quaternion(*quat)
-        marker_array.markers.append(orient_marker)
+    for i, (point, dim) in enumerate(zip(XYZ, dims)):
+        m = Marker()
+        m.header.frame_id = frame_id
+        m.type = Marker.CYLINDER
+        m.action = Marker.ADD
+        m.id = i * 2
+        m.scale.x = dim[0]
+        m.scale.y = dim[1]
+        m.scale.z = dim[2]
+        m.pose.position.x = point[0]
+        m.pose.position.y = point[1]
+        m.pose.position.z = point[2]
+        m.color.a = 1.0
+        m.color.r = 1.0
+        m.color.g = 0.0
+        m.color.b = 0.0
+        quat = tf.transformations.quaternion_from_euler(0, 0, -np.pi / 2)
+        m.pose.orientation = Quaternion(*quat)
+
+        marker_array.markers.append(m)
     return marker_array
 
 
-def pointcloud2_to_np(pcl: PointCloud2):
+def pc2_to_np(pcl: PointCloud2):
     pc_array = ros_numpy.point_cloud2.pointcloud2_to_array(pcl)
     xyz_array = np.vstack((pc_array["x"], pc_array["y"], pc_array["z"])).transpose()
     return xyz_array
@@ -243,15 +145,14 @@ class PointCloudTransformer:
         self.tf_buffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tf_buffer)
 
-    def tf(self, cloud_in, from_frame, to_frame):
+    def tf(self, cloud_in: PointCloud2, from_frame: str, to_frame: str) -> PointCloud2:
         # Wait for the transform to be available
         try:
             transform = self.tf_buffer.lookup_transform(
                 to_frame, from_frame, rospy.Time(0), rospy.Duration(1.0)
             )
-            # Transform the point cloud
-            cloud_out = tf2_sensor_msgs.do_transform_cloud(cloud_in, transform)
-            return cloud_out
+
+            return tf2_sensor_msgs.do_transform_cloud(cloud_in, transform)
         except (
             tf2_ros.LookupException,
             tf2_ros.ConnectivityException,
@@ -286,7 +187,7 @@ class CameraSubscriber:
             self.lidar_callback,
         )
 
-        self.pcl_transformer = PointCloudTransformer()
+        self.pcl_transformer: PointCloudTransformer = PointCloudTransformer()
 
         # Timer to process messages at a desired frequency (e.g., 1 Hz)
         self.timer = rospy.Timer(rospy.Duration(1 / RATE_LIMIT), self.timer_callback)
@@ -314,7 +215,7 @@ class CameraSubscriber:
                 )
 
                 if lidar_pcl:
-                    lidar_pcl: np.ndarray = pointcloud2_to_np(lidar_pcl)
+                    lidar_pcl: np.ndarray = pc2_to_np(lidar_pcl)
                     self.process(rgb_img, lidar_pcl)
 
                 self.data_buffer = ([], [])
@@ -330,15 +231,21 @@ class CameraSubscriber:
         print(f"get_detections:  \t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
         start = time.perf_counter()
-        get_cutting_data(bboxes, kpts, pcl)
+        cut_xyz, cut_diam = get_cutting_data(bboxes, kpts, pcl)
         print(f"get_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
-        # marker_pub.publish(markers(cut_XYZ, diam, incl_radians))
+        out_pcd = np_to_pcd2(cut_xyz)
+        out_pcd = self.pcl_transformer.tf(
+            out_pcd, "zed2i_left_camera_optical_frame", "PandarQT"
+        )
+        marker_pub.publish(markers(pc2_to_np(out_pcd), cut_diam))
+
+        print()
 
 
 def main():
     rospy.init_node("treedet_inference", anonymous=True)
     rospy.set_param("/use_sim_time", True)
 
-    rcs = CameraSubscriber()
+    CameraSubscriber()
     rospy.spin()
