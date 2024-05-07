@@ -10,7 +10,7 @@ setup_args = generate_distutils_setup(
         "numpy",
         "onnxruntime",
         "cv2",
-        "ros_numpy",
+        "rosnumpy",
         "scipy",
     ],
 )

@@ -1,6 +1,8 @@
 numpy
 loguru
 scikit-image
+scikit-learn
+rosnumpy
 tqdm
 thop
 ninja
