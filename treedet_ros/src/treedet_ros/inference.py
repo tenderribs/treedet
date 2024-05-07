@@ -1,4 +1,3 @@
-#!/home/mark/miniconda3/envs/yolox-ti/bin/python3
 import threading
 import rospy
 import onnxruntime
@@ -20,6 +19,9 @@ from geometry_msgs.msg import Quaternion
 
 from visualization_msgs.msg import Marker, MarkerArray
 from scipy.spatial import Delaunay
+
+print("importing fit_cylinder from Python package treedet_ros in inference.py")
+from treedet_ros.fit_cylinder import fit_cylinder
 
 RATE_LIMIT = 10.0  # process incoming images at given frequency
 
@@ -85,7 +87,7 @@ def transform_point_cloud(tf_buffer, pcl, frame_id="zed2i_left_camera_optical_fr
         tf2_ros.ConnectivityException,
         tf2_ros.ExtrapolationException,
     ):
-        print("sth wrong with tf")
+        rospy.logerror("sth wrong with tf")
         return None
 
 
@@ -168,8 +170,13 @@ def get_cutting_data(bboxes: np.ndarray, kpts: np.ndarray, pcl: np.ndarray):
         # filter pointcloud for each frustum (only search pcl within)
         hull = Delaunay(points=frustum)
         inside = pcl[hull.find_simplex(pcl) >= 0]
-        print(inside)
-        detection_pub.publish(pc2_msg(inside))
+
+        # try to fit a cylinder to the points inside
+        height, tree_radius, T_matrix = fit_cylinder(kpts, inside, P)
+        print(f"height: {height}")
+        print(f"tree_radius: {tree_radius}")
+        print(f"T_matrix: {T_matrix}")
+        # detection_pub.publish(pc2_msg(inside))
 
 
 def point_markers(XYZ, frame_id="zed2i_left_camera_optical_frame"):
@@ -250,7 +257,7 @@ class PointCloudTransformer:
             tf2_ros.ConnectivityException,
             tf2_ros.ExtrapolationException,
         ) as e:
-            rospy.logerr("Error transforming point cloud: %s" % str(e))
+            rospy.logerror("Error transforming point cloud: %s" % str(e))
             return None
 
 
@@ -272,6 +279,7 @@ class CameraSubscriber:
             self.rgb_callback,
         )
 
+        # TODO: should set to self_filtered topic once fixed
         self.lidar_subscriber = rospy.Subscriber(
             "/hesai/pandar",
             PointCloud2,
@@ -328,7 +336,7 @@ class CameraSubscriber:
         # marker_pub.publish(markers(cut_XYZ, diam, incl_radians))
 
 
-if __name__ == "__main__":
+def main():
     rospy.init_node("treedet_inference", anonymous=True)
     rospy.set_param("/use_sim_time", True)
 
