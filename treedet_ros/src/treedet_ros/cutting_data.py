@@ -53,28 +53,14 @@ def ray_vec(kpt: np.ndarray):
     return w / np.linalg.norm(w)
 
 
-def ray(vec: np.ndarray):
-    """
-    Convert the ray vector into actual points along the vector with 10cm resolution
-    """
-    assert vec.shape[0] == 3
-    meters = 30  # determine how far away we look into distance
-
-    return np.array(
-        [
-            vec[0] * np.linspace(0, meters, meters * 10),
-            vec[1] * np.linspace(0, meters, meters * 10),
-            vec[2] * np.linspace(0, meters, meters * 10),
-        ]
-    ).T
-
-
 def estimate_3d(pcl: np.ndarray, ray_vec: np.ndarray):
     """
     Projects ray vector into 3d space and then computes average of the closest points to the ray
     param ray_vec: should be normalized!
     """
-    # assert np.linalg.norm(ray_vec) == 1
+    closest_num = 4
+    if pcl.size < closest_num:
+        raise ValueError("Not enough points in pcl")
 
     pcl = np.array(  # sort points based on distance to ray vector
         sorted(
@@ -83,8 +69,13 @@ def estimate_3d(pcl: np.ndarray, ray_vec: np.ndarray):
         )
     )
 
-    # start off with inital guess of where the kpt is. 2 small number because far away tree pcls don't have many points
-    closest = pcl[:4, :]
+    threshold_distance = 0.4
+
+    if np.linalg.norm(np.cross(pcl[0], ray_vec)) > threshold_distance:
+        raise ValueError("Closest point is too far from ray")
+
+    # start off with inital guess of where the kpt is.
+    closest = pcl[:closest_num, :]
     return np.mean(closest, axis=0)  # return the centroid
 
 
@@ -103,21 +94,11 @@ def project_2dto3d(kpts: np.ndarray, pcl: np.ndarray):
     w_r = ray_vec(kpts[6:8])
     w_ax2 = ray_vec(kpts[12:14])
 
-    # the projection ray from the camera matrix:
-    ray_fc = ray(w_fc)
-    ray_l = ray(w_l)
-    ray_r = ray(w_r)
-    ray_ax2 = ray(w_ax2)
-
     # calculate the width of the tree based on initial estimate
-    radius = (
-        np.sqrt(np.sum((estimate_3d(pcl, ray_l) - estimate_3d(pcl, ray_r)) ** 2)) / 2
-    )
+    radius = np.sqrt(np.sum((estimate_3d(pcl, w_l) - estimate_3d(pcl, w_r)) ** 2)) / 2
 
     # calculate height
-    height = np.sqrt(
-        np.sum((estimate_3d(pcl, ray_fc) - estimate_3d(pcl, ray_ax2)) ** 2)
-    )
+    height = np.sqrt(np.sum((estimate_3d(pcl, w_fc) - estimate_3d(pcl, w_ax2)) ** 2))
 
     fc3d = estimate_3d(pcl, w_fc)
     return (
@@ -220,11 +201,6 @@ def get_cutting_data(
     assert bboxes.shape[0] == kpts.shape[0]  # sanity checks
     assert bboxes.shape[1] == 4 and kpts.shape[1] == 15 and pcl.shape[1] == 3
 
-    # # get the inclination of the cut in degrees
-    # cut_uv = kpts[:, 0:2]
-    # ax1_uv = kpts[:, 9:11]
-    # incl_radians = uv2incl(ax1=ax1_uv, fc=cut_uv)
-
     cut_xyzs, dim_xyzs = [], []
 
     pcl = pcl[
@@ -250,17 +226,26 @@ def get_cutting_data(
         hull = Delaunay(points=frustum)
         inside = pcl[hull.find_simplex(pcl) >= 0]
 
-        # fit a cylinder to the points inside
-        if fit_cylinder:
-            height, tree_radius, T_matrix = do_fit_cylinder(kpts=kpts, pcl=inside)
-            cut_xyz = T_matrix[:3, 3]  # translation part of T matrix
-        else:
-            height, tree_radius, cut_xyz = project_2dto3d(kpts=kpts, pcl=inside)
+        if inside.size == 0:
+            continue
 
-        # felling cut 3d coords and 3d bounding box
-        dim_xyz = np.array([2 * tree_radius, 2 * tree_radius, height])
+        try:
+            # fit a cylinder to the points inside
+            if fit_cylinder:
+                height, tree_radius, T_matrix = do_fit_cylinder(kpts=kpts, pcl=inside)
+                cut_xyz = T_matrix[:3, 3]  # translation part of T matrix
+            else:
+                height, tree_radius, cut_xyz = project_2dto3d(kpts=kpts, pcl=inside)
 
-        cut_xyzs.append(cut_xyz)
-        dim_xyzs.append(dim_xyz)
+            # felling cut 3d coords and 3d bounding box
+            dim_xyz = np.array([2 * tree_radius, 2 * tree_radius, height])
 
+            cut_xyzs.append(cut_xyz)
+            dim_xyzs.append(dim_xyz)
+        except Exception as e:
+            rospy.logwarn(e)
+            continue
+
+    if not cut_xyzs:  # Return empty arrays if no cuts were processed
+        return np.empty([0, 3]), np.empty([0, 3])
     return np.vstack(cut_xyzs), np.vstack(dim_xyzs)

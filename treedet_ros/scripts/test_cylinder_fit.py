@@ -9,6 +9,7 @@ from treedet_ros.pcl import pc2 as pcl, kp2 as kpts, set_axes_equal
 # https://www.stereolabs.com/docs/positional-tracking/coordinate-frames
 
 pcl = pcl[pcl[:, 2] >= 3]  # reject too close points
+# pcl = pcl[pcl[:, 2] <= 6]  # reject too far points
 
 P = np.array(
     [
@@ -27,18 +28,6 @@ cy = P[1, 2]
 def ray_vec(kpt: np.ndarray):
     w = np.array([(kpt[0] - cx) / fx, (kpt[1] - cy) / fy, 1])
     return w / np.linalg.norm(w)
-
-
-def ray(vec: np.ndarray):
-    assert vec.shape[0] == 3
-    meters = 20
-    return np.array(
-        [
-            vec[0] * np.linspace(0, meters, meters * 10),
-            vec[1] * np.linspace(0, meters, meters * 10),
-            vec[2] * np.linspace(0, meters, meters * 10),
-        ]
-    ).T
 
 
 def estimate_3d(pcl, ray_vec):
@@ -88,18 +77,12 @@ w_r = ray_vec(kpts[6:8])
 w_ax1 = ray_vec(kpts[9:11])
 w_ax2 = ray_vec(kpts[12:14])
 
-# the projection ray from the camera matrix:
-ray_fc = ray(w_fc)
-ray_l = ray(w_l)
-ray_r = ray(w_r)
-ray_ax1 = ray(w_ax1)
-ray_ax2 = ray(w_ax2)
 
 # calculate the width of the tree based on initial estimate
-radius = np.sqrt(np.sum((estimate_3d(pcl, ray_l) - estimate_3d(pcl, ray_r)) ** 2)) / 2
+radius = np.sqrt(np.sum((estimate_3d(pcl, w_l) - estimate_3d(pcl, w_r)) ** 2)) / 2
 
 # calculate height
-height = np.sqrt(np.sum((estimate_3d(pcl, ray_fc) - estimate_3d(pcl, ray_ax2)) ** 2))
+height = np.sqrt(np.sum((estimate_3d(pcl, w_fc) - estimate_3d(pcl, w_ax2)) ** 2))
 
 # calculate the 3D rotation matrix to rotate (0, -1, 0) to to tree orientation
 init_vec = np.array([0, -1, 0])
@@ -164,11 +147,11 @@ ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.set_zlabel("Z")
 
-ax.scatter(cylinder[:, 0], cylinder[:, 1], cylinder[:, 2], label="Initial cylinder")
+# ax.scatter(cylinder[:, 0], cylinder[:, 1], cylinder[:, 2], label="Initial cylinder")
 ax.scatter(init_guess[:, 0], init_guess[:, 1], init_guess[:, 2], label="Initial guess")
 ax.scatter(cylinder_tf[:, 0], cylinder_tf[:, 1], cylinder_tf[:, 2], label="Cylinder tf")
 ax.scatter(pcl[:, 0], pcl[:, 1], pcl[:, 2], label="Filtered LiDAR pcl")
 
-# set_axes_equal(ax)
+set_axes_equal(ax)
 ax.legend()
 plt.show()

@@ -8,8 +8,7 @@ import cv2
 import time
 import tf2_ros
 import tf2_sensor_msgs
-
-# import tf.transformations
+import tf.transformations
 import ros_numpy
 
 from cv_bridge import CvBridge
@@ -17,7 +16,7 @@ from sensor_msgs.msg import Image, CompressedImage
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
 
-# from geometry_msgs.msg import Quaternion
+from geometry_msgs.msg import Quaternion
 
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -75,7 +74,7 @@ def get_detections(raw_dets: list, rescale_ratio: float):
     Get filtered detections in scaling of original rgb and depth image
     """
     # filter uncertain bad detections
-    raw_dets = raw_dets[raw_dets[:, 4] >= 0.85]
+    raw_dets = raw_dets[raw_dets[:, 4] >= 0.95]
 
     # rescale bbox and kpts w.r.t original image
     raw_dets[:, :4] /= rescale_ratio
@@ -128,8 +127,8 @@ def np_to_markers(XYZ, dims, frame_id):
         m.color.r = 1.0
         m.color.g = 0.0
         m.color.b = 0.0
-        # quat = tf.transformations.quaternion_from_euler(0, 0, np.pi / 2)
-        # m.pose.orientation = Quaternion(*quat)
+        quat = tf.transformations.quaternion_from_euler(0, 0, 0)
+        m.pose.orientation = Quaternion(*quat)
 
         marker_array.markers.append(m)
     return marker_array
@@ -241,7 +240,6 @@ class CameraSubscriber:
             out_pcd, "zed2i_left_camera_optical_frame", "BASE"
         )
         marker_pub.publish(np_to_markers(pc2_to_np(out_pcd), cut_diam, "BASE"))
-
         print()
 
 
