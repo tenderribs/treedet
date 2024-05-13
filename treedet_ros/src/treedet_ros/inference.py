@@ -21,8 +21,9 @@ from geometry_msgs.msg import Quaternion
 from visualization_msgs.msg import Marker, MarkerArray
 
 from treedet_ros.cutting_data import get_cutting_data
+from treedet_ros.sort import Sort
 
-RATE_LIMIT = 5.0  # process incoming images at given frequency
+RATE_LIMIT = 10.0  # process incoming images at given frequency
 
 br = CvBridge()
 
@@ -74,7 +75,7 @@ def get_detections(raw_dets: list, rescale_ratio: float):
     Get filtered detections in scaling of original rgb and depth image
     """
     # filter uncertain bad detections
-    raw_dets = raw_dets[raw_dets[:, 4] >= 0.95]
+    raw_dets = raw_dets[raw_dets[:, 4] >= 0.9]
 
     # rescale bbox and kpts w.r.t original image
     raw_dets[:, :4] /= rescale_ratio
@@ -172,6 +173,9 @@ class CameraSubscriber:
 
         self.data_buffer = ([], [])  # RGB, Depth
 
+        self.tree_tracker = Sort()
+        self.tree_index = {}
+
         # lock prevents simulataneous R/W to the buffer
         self.lock = threading.Lock()
 
@@ -231,19 +235,28 @@ class CameraSubscriber:
         bboxes, confs, kpts = get_detections(output[0], ratio)
         print(f"get_detections:  \t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
+        trackers = self.tree_tracker.update(dets=bboxes)
+        print(trackers)
+
+        return
         start = time.perf_counter()
         cut_xyz, cut_diam = get_cutting_data(bboxes, kpts, pcl)
         print(f"get_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
+        # pass the detections through object tracker across frames. Tells us which trees are visible.
+
+        for d in trackers:
+            self.tree_index
         # transform the cutting point coordinates into map frame
         out_pcd = np_to_pcd2(cut_xyz)
         out_pcd = self.pcl_transformer.tf(
             out_pcd, "zed2i_left_camera_optical_frame", "map"
         )
         detection_pub.publish(out_pcd)
+        cut_xyz_map_np = pc2_to_np(out_pcd)
 
-        # these markers look wonky in z-axis because pivot point of cylinder marker is at center. tree hence appear to go underground
-        marker_pub.publish(np_to_markers(pc2_to_np(out_pcd), cut_diam, "map"))
+        # # these markers look wonky in z-axis because pivot point of cylinder marker is at center. tree hence appear to go underground
+        # marker_pub.publish(np_to_markers(pc2_to_np(out_pcd), cut_diam, "map"))
 
 
 def main():
