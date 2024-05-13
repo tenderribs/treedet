@@ -139,6 +139,8 @@ T, distances, iters = icp(cylinder, pcl, init_pose=init, tolerance=1e-2)
 cylinder_tf = np.column_stack([cylinder, np.ones(cylinder.shape[0])])
 cylinder_tf = (T @ cylinder_tf.T).T
 
+coords = T[:3, 3]
+
 print(f"ran ICP in {iters} iters")
 
 fig = plt.figure()
@@ -148,9 +150,10 @@ ax.set_ylabel("Y")
 ax.set_zlabel("Z")
 
 # ax.scatter(cylinder[:, 0], cylinder[:, 1], cylinder[:, 2], label="Initial cylinder")
-ax.scatter(init_guess[:, 0], init_guess[:, 1], init_guess[:, 2], label="Initial guess")
+# ax.scatter(init_guess[:, 0], init_guess[:, 1], init_guess[:, 2], label="Initial guess")
 ax.scatter(cylinder_tf[:, 0], cylinder_tf[:, 1], cylinder_tf[:, 2], label="Cylinder tf")
-ax.scatter(pcl[:, 0], pcl[:, 1], pcl[:, 2], label="Filtered LiDAR pcl")
+# ax.scatter(pcl[:, 0], pcl[:, 1], pcl[:, 2], label="Filtered LiDAR pcl")
+ax.scatter(coords[0], coords[1], coords[2], label="Felling Cut Point")
 
 set_axes_equal(ax)
 ax.legend()

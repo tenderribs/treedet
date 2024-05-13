@@ -85,27 +85,27 @@ def get_detections(raw_dets: list, rescale_ratio: float):
     return raw_dets[:, :4], raw_dets[:, 4], raw_dets[:, 6:]
 
 
-# def point_markers(XYZ, frame_id="zed2i_left_camera_optical_frame"):
-#     marker_array = MarkerArray()
-#     for i, point in enumerate(XYZ):
-#         marker = Marker()
-#         marker.header.frame_id = frame_id
-#         marker.type = Marker.SPHERE
-#         marker.id = i * 2
-#         marker.pose.position.x = point[0]
-#         marker.pose.position.y = point[1]
-#         marker.pose.position.z = point[2]
-#         marker.scale.x = 0.2
-#         marker.scale.y = 0.2
-#         marker.scale.z = 0.2
-#         marker.color.a = 1.0
-#         marker.color.r = 0.0
-#         marker.color.g = 0.0
-#         marker.color.b = 1.0
-#         # quat = tf.transformations.quaternion_from_euler(0, 0, 1)
-#         # marker.pose.orientation = Quaternion(*quat)
-#         marker_array.markers.append(marker)
-#     return marker_array
+def point_markers(XYZ, frame_id="zed2i_left_camera_optical_frame"):
+    marker_array = MarkerArray()
+    for i, point in enumerate(XYZ):
+        marker = Marker()
+        marker.header.frame_id = frame_id
+        marker.type = Marker.SPHERE
+        marker.id = i * 2
+        marker.pose.position.x = point[0]
+        marker.pose.position.y = point[1]
+        marker.pose.position.z = point[2]
+        marker.scale.x = 0.2
+        marker.scale.y = 0.2
+        marker.scale.z = 0.2
+        marker.color.a = 1.0
+        marker.color.r = 0.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
+        quat = tf.transformations.quaternion_from_euler(0, 0, 0)
+        marker.pose.orientation = Quaternion(*quat)
+        marker_array.markers.append(marker)
+    return marker_array
 
 
 def np_to_markers(XYZ, dims, frame_id):
@@ -235,12 +235,15 @@ class CameraSubscriber:
         cut_xyz, cut_diam = get_cutting_data(bboxes, kpts, pcl)
         print(f"get_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
+        # transform the cutting point coordinates into map frame
         out_pcd = np_to_pcd2(cut_xyz)
         out_pcd = self.pcl_transformer.tf(
-            out_pcd, "zed2i_left_camera_optical_frame", "BASE"
+            out_pcd, "zed2i_left_camera_optical_frame", "map"
         )
-        marker_pub.publish(np_to_markers(pc2_to_np(out_pcd), cut_diam, "BASE"))
-        print()
+        detection_pub.publish(out_pcd)
+
+        # these markers look wonky in z-axis because pivot point of cylinder marker is at center. tree hence appear to go underground
+        marker_pub.publish(np_to_markers(pc2_to_np(out_pcd), cut_diam, "map"))
 
 
 def main():
