@@ -1,0 +1,6 @@
+#!/usr/bin/env python
+
+from treedet_ros.inference import main
+
+if __name__ == "__main__":
+    main()

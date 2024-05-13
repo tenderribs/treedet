@@ -83,7 +83,7 @@ class Exp(MyExp):
                 num_kpts=self.num_kpts,
             )
 
-            assert self.mean_bgr is None and self.std_bgr is None
+            assert self.mean_bgr is not None and self.std_bgr is not None
             self.model = YOLOX(self.mean_bgr, self.std_bgr, backbone, head)
 
         self.model.apply(init_yolo)

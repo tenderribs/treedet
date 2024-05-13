@@ -4,7 +4,17 @@ This repository is based on [edgeai-yolox](https://github.com/TexasInstruments/e
 
 ## ROS Node
 
-The ROS package wrapper is located in `treedet_ros` while the development code for the computer vision model is in `treedet`.
+The ROS package wrapper is located in `treedet_ros` while the development code for the computer vision model is in `treedet`. When running the code on rosbags from field tests, it is important to use the `--clock` flag to indicate sim time, for example:
+
+```sh
+rosbag play -l --clock harveri-hpk_2023-05-05-09-25-20_6.bag
+```
+
+- Currently this module relies on the map to odom transformations supplied from other modules. I couldn't get these working super well on the field test data.
+
+- The expectation is that you simlink the `treedet_ros` folder into the catkin_ws. The `treedet` folder only contains files related to training the machine learning model.
+
+- For inference, copy an onnx file of your choice from the pretrained models into the root directory of `treedet_ros` as `treedet_ros/model.onnx`.
 
 ## Datasets
 

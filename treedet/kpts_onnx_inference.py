@@ -74,7 +74,7 @@ def visualize(img, det):
     cv2.rectangle(overlay, p1, p2, (255, 251, 43), -1)  # -1 fills the rectangle
 
     # Alpha determines the transparency of the overlay: 0 is fully transparent, 1 is fully opaque
-    alpha = 0.4
+    alpha = 0.2
 
     # Blend the overlay with the original image
     img = cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
@@ -86,11 +86,11 @@ def visualize(img, det):
     cv2.putText(
         img=img,
         text=f"{conf}%",
-        org=(int(det[15]) - 10, int(det[16]) + 20),
+        org=(int(det[15]) - 15, int(det[16]) + 20),
         fontFace=cv2.FONT_HERSHEY_SIMPLEX,
         fontScale=0.5,
-        color=(59, 40, 34),
-        thickness=2,
+        color=(255, 255, 255),
+        thickness=1,
     )
 
     # plot the x and y keypoints with sufficient confidence score
