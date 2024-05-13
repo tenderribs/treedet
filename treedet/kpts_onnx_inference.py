@@ -9,8 +9,6 @@ import cv2
 import time
 
 
-
-
 from yolox.data.data_augment import preproc as preprocess
 from yolox.utils import mkdir
 
@@ -112,12 +110,13 @@ def visualize(img, det):
     return img
 
 
-class TrtSession():
+class TrtSession:
     def __init__(self, model):
         print("Establishing TrtSession")
 
         import onnx
         import onnx_tensorrt.backend as backend
+
         print(model)
         modelf = onnx.load(model)
 
@@ -131,11 +130,13 @@ class TrtSession():
         print(img.shape)
         return self.engine.run({self.input_name: img})[0]
 
-class OnnxSession():
+
+class OnnxSession:
     def __init__(self, model):
         print("Establishing OnnxSession")
 
         import onnxruntime
+
         self.session = onnxruntime.InferenceSession(args.model)
 
     def run(self, img):
@@ -143,7 +144,6 @@ class OnnxSession():
         ort_inputs = {self.session.get_inputs()[0].name: img[None, :, :, :]}
         output = self.session.run(None, ort_inputs)
         return output[0]
-
 
 
 if __name__ == "__main__":
