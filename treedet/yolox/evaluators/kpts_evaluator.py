@@ -106,7 +106,9 @@ class TreeKptsEvaluator:
             model(x)
             model = model_trt
 
-        for cur_iter, (imgs, _, info_imgs, ids) in enumerate(progress_bar(self.dataloader)):
+        for cur_iter, (imgs, _, info_imgs, ids) in enumerate(
+            progress_bar(self.dataloader)
+        ):
             with torch.no_grad():
                 imgs = imgs.type(tensor_type)
 
@@ -136,7 +138,9 @@ class TreeKptsEvaluator:
 
     def convert_to_coco_format(self, outputs, info_imgs, ids):
         data_list = []
-        for output, img_h, img_w, img_id in zip(outputs, info_imgs[0], info_imgs[1], ids):
+        for output, img_h, img_w, img_id in zip(
+            outputs, info_imgs[0], info_imgs[1], ids
+        ):
             if output is None:
                 continue
             output = output.cpu()
@@ -145,7 +149,9 @@ class TreeKptsEvaluator:
             bboxes = output[:, 0:4]
 
             # preprocessing: resize
-            scale = min(self.img_size[0] / float(img_h), self.img_size[1] / float(img_w))
+            scale = min(
+                self.img_size[0] / float(img_h), self.img_size[1] / float(img_w)
+            )
             bboxes /= scale
             bboxes = xyxy2xywh(bboxes)
 

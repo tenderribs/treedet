@@ -14,3 +14,14 @@ RUN pip install --no-input --upgrade pip setuptools
 RUN pip uninstall --yes pillow
 RUN pip install --no-input -U --force-reinstall pillow-simd
 RUN pip install --no-input cython wheel numpy torchinfo pycocotools
+
+# install onnx-tensorrt
+WORKDIR /tmp
+RUN git clone --recursive -b 8.6-GA https://github.com/onnx/onnx-tensorrt.git \
+    cd onnx-tensorrt \
+    mkdir build && cd build \
+    cmake .. -DTENSORRT_ROOT=/usr/src/tensorrt && make -j \
+    make install \
+    cd .. \
+    python3 -m pip install onnx==1.16.0 \
+    python3 setup.py install

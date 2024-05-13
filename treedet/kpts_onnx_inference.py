@@ -8,7 +8,8 @@ import os
 import cv2
 import time
 
-import onnxruntime
+
+
 
 from yolox.data.data_augment import preproc as preprocess
 from yolox.utils import mkdir
@@ -111,8 +112,43 @@ def visualize(img, det):
     return img
 
 
+class TrtSession():
+    def __init__(self, model):
+        print("Establishing TrtSession")
+
+        import onnx
+        import onnx_tensorrt.backend as backend
+        print(model)
+        modelf = onnx.load(model)
+
+        self.engine = backend.prepare(modelf)
+        self.input_name = self.engine.inputs[0]
+        print(f"self.input_name: {self.input_name}")
+
+    def run(self, img):
+        print(img.shape)
+        img = img[None, :, :, :]
+        print(img.shape)
+        return self.engine.run({self.input_name: img})[0]
+
+class OnnxSession():
+    def __init__(self, model):
+        print("Establishing OnnxSession")
+
+        import onnxruntime
+        self.session = onnxruntime.InferenceSession(args.model)
+
+    def run(self, img):
+        # create batch of size 1
+        ort_inputs = {self.session.get_inputs()[0].name: img[None, :, :, :]}
+        output = self.session.run(None, ort_inputs)
+        return output[0]
+
+
+
 if __name__ == "__main__":
     args = make_parser().parse_args()
+
     input_shape = tuple(map(int, args.input_shape.split(",")))
 
     image_files = [
@@ -124,7 +160,7 @@ if __name__ == "__main__":
         f for f in image_files if f.lower().endswith((".png", ".jpg", ".jpeg"))
     ]  # Filter for image files
 
-    session = onnxruntime.InferenceSession(args.model)
+    session = TrtSession(args.model)
 
     total_inference = 0
 
@@ -133,13 +169,12 @@ if __name__ == "__main__":
         img, ratio = preprocess(origin_img, input_shape)
 
         start = time.perf_counter()
-        ort_inputs = {session.get_inputs()[0].name: img[None, :, :, :]}
-        output = session.run(None, ort_inputs)
-        total_inference += time.perf_counter() - start
 
         # each row in dets contains the following in order:
         # reg_output (bbox), obj_output, cls_output, kpts_output
-        dets = output[0]
+        dets = session.run(img)
+
+        total_inference += time.perf_counter() - start
 
         dets = dets[dets[:, 4] >= args.score_thr]
 

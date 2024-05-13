@@ -84,9 +84,11 @@ if __name__ == "__main__":
     model.eval()
     model.to(exp.device_type)
 
+    trt_file = None
+
     # run evaluation
     ap50_95, ap50, summary = evaluator.evaluate(
-        model, distributed=False, half=False, test_size=exp.test_size
+        model, distributed=False, half=False, test_size=exp.test_size, trt_file=trt_file
     )
 
     print(f"ap50_95: {ap50_95}, ap50: {ap50}\n\n{summary}")

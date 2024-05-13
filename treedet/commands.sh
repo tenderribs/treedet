@@ -16,21 +16,15 @@ python3 -m yolox.tools.export_onnx \
 
 # run inference
 python3 kpts_onnx_inference.py \
---model pretrained_models/yolox_l_cana100.onnx \
+--model pretrained_models/yolox_s_canawiki325_sparse_nol1.onnx \
 --output_dir YOLOX_outputs/inf_canawiki325sparse \
 --images_path ./datasets/mark_forest \
 --score_thr 0.85
 
 # create trt engine
 trtexec \
---onnx=pretrained_models/yolox_s_cana100_tree_pose_inline_decode.onnx \
---saveEngine=pretrained_models/yolox_s_cana100_tree_pose_inline_decode.engine
-
-python3 kpts_trt_inference.py \
---model pretrained_models/yolox_s_cana100_tree_pose_inline_decode.engine \
---output_dir YOLOX_outputs/trtout \
---images_path ./datasets/mark_forest \
---score_thr 0.8
+--onnx=treedet/pretrained_models/yolox_s_canawiki325_sparse_nol1.onnx \
+--saveEngine=treedet/pretrained_models/yolox_s_canawiki325_sparse_nol1.engine
 
 # run evaluation
 python3 eval_kpts.py \
