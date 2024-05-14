@@ -14,12 +14,12 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import CompressedImage
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
-from typing import Union
+
 # from visualization_msgs.msg import MarkerArray
 
 from treedet_ros.cutting_data import get_cutting_data
-from treedet_ros.src.treedet_ros.sort_tracker import Sort
-from treedet_ros.rviz import point_markers, np_to_markers, view_trackers
+from treedet_ros.sort_tracker import Sort
+from treedet_ros.bbox import tree_data_to_bbox, find_overlapping_tree_id
 
 RATE_LIMIT = 5.0  # process incoming images at given frequency
 
@@ -113,9 +113,6 @@ class PointCloudTransformer:
             return None
 
 
-
-
-
 class TreeDetector:
     def __init__(self):
         package_path = rospkg.RosPack().get_path("treedet_ros")
@@ -132,7 +129,7 @@ class TreeDetector:
             min_hits=3,
         )
 
-        self.lock = threading.Lock() # lock prevents simulataneous R/W to the buffer
+        self.lock = threading.Lock()  # lock prevents simulataneous R/W to the buffer
 
         self.rgb_subscriber = rospy.Subscriber(
             "/zed2i/zed_node/rgb/image_rect_color/compressed",
@@ -175,36 +172,58 @@ class TreeDetector:
                 )
 
                 if lidar_pcl:
-                    lidar_pcl: np.ndarray = pc2_to_np, view_trackers(lidar_pcl)
+                    lidar_pcl: np.ndarray = pc2_to_np(lidar_pcl)
                     self.process(rgb_img, lidar_pcl)
 
                 self.data_buffer = ([], [])
-
-    def find_overlapping_bbox_if_exists(bbox: np.ndarray, bboxes: np.ndarray, iou_thresh: float = 0.3) -> Union[int, None]:
-
-
 
     def update_tree_index(
         self, cut_xyzs: np.ndarray, cut_boxes: np.ndarray, tracking_ids: np.ndarray
     ) -> None:
         """Update the tree index with new cutting data"""
 
-        # atm only will do based on tracking ID. later on will also associate based on 3D bbox if necessary
-        # like if the tree bboxes overlap (2D birds eye view) then consider trees same
-        tree_data = np.hstack((cut_xyzs, cut_boxes))
-        for data, tracking_id in zip(tree_data, tracking_ids):
-            id = tracking_id[0]
-            if id in self.tree_index:
-                self.tree_index[id].append(data)
-            else:
-                self.tree_index[id] = [data]
+        new_tree_data = np.hstack((cut_xyzs, cut_boxes))
 
-    def fetch_trees(self):
+        existing_tree_data, existing_tracking_ids = self.fetch_tree_data()
+        existing_bboxes = tree_data_to_bbox(existing_tree_data)
+        print("called first one")
+        for new_d, tracking_id in zip(new_tree_data, tracking_ids):
+            id = tracking_id[0]
+
+            new_bbox = tree_data_to_bbox(new_d.reshape(1, -1))  # needs reshape 1d to 2d
+
+            # sometimes the tracker forgets loses track and then locks onto a tree again.
+            # must prevent duplicates in our tree index:
+            already_found_id = find_overlapping_tree_id(
+                existing_bboxes, new_bbox, existing_tracking_ids
+            )
+
+            # prefer adding to existing entry vs. creating new
+            if already_found_id:
+                id = already_found_id
+
+            if id in self.tree_index:
+                self.tree_index[id].append(new_d)
+            else:
+                self.tree_index[id] = [new_d]
+
+    def fetch_tree_data(self):
         """Read the tree index and prepare an average of values"""
-        for tree_data in self.tree_index.values():
-            if len(tree_data):
-                tree_data = np.vstack(tree_data)
-                tree_data = np.mean(tree_data, axis=0)
+        ret_tracking_ids = []
+        ret_tree_data = []
+
+        for t_id, tree_data in self.tree_index.items():
+            if len(tree_data) == 0:
+                continue
+
+            # compute the mean of existing values
+            tree_data = np.vstack(tree_data)
+            ret_tree_data.append(np.mean(tree_data, axis=0))
+            ret_tracking_ids.append(t_id)
+
+        if len(ret_tree_data) > 0:
+            return np.vstack(ret_tree_data), ret_tracking_ids
+        return None, None
 
     def process(self, rgb_img: np.ndarray, pcl: np.ndarray):
         # pass image through model
@@ -241,7 +260,7 @@ class TreeDetector:
         )
 
         self.update_tree_index(
-            cut_xyz=cut_xyzs, cut_box=cut_boxes, tracking_ids=tracking_ids
+            cut_xyzs=cut_xyzs, cut_boxes=cut_boxes, tracking_ids=tracking_ids
         )
 
         print(f"get_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
