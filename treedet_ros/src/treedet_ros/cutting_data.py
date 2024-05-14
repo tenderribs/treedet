@@ -23,8 +23,6 @@ cy = P[1, 2]
 Z_MIN = 0.1
 Z_MAX = 20
 
-# currently assume robot_pose is constant
-
 
 def uv2xyz(uv: np.ndarray, Z: float):
     """
@@ -254,6 +252,6 @@ def get_cutting_data(
 
             continue
 
-    if not cut_xyzs or not dim_xyz:  # Return empty arrays if no cuts were processed
+    if len(cut_xyzs) == 0 or len(dim_xyzs) == 0:
         return np.empty([0, 3]), np.empty([0, 3]), np.empty([0, 0])
     return np.vstack(cut_xyzs), np.vstack(dim_xyzs), np.vstack(valid_tracking_ids)
