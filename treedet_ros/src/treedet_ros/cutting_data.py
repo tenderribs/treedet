@@ -79,7 +79,7 @@ def estimate_3d(pcl: np.ndarray, ray_vec: np.ndarray):
     return np.mean(closest, axis=0)  # return the centroid
 
 
-def project_2dto3d(kpts: np.ndarray, pcl: np.ndarray):
+def estimate_3d_tree_data(kpts: np.ndarray, pcl: np.ndarray):
     """
     Fit a cylinder to the lidar pointclouds of trees
     kpts: 2D image plane coordinates of tree keypoints
@@ -132,7 +132,7 @@ def create_cylinder(radius=0.3, height=4, num_pts=50, part=0.3):
 
 
 def do_fit_cylinder(kpts: np.ndarray, pcl: np.ndarray):
-    height, radius, fc3d = project_2dto3d(kpts, pcl)
+    height, radius, fc3d = estimate_3d_tree_data(kpts, pcl)
 
     # calculate the 3D rotation matrix to rotate (0, -1, 0) to to tree orientation
     init_vec = np.array([0, -1, 0])
@@ -192,7 +192,11 @@ def do_fit_cylinder(kpts: np.ndarray, pcl: np.ndarray):
 
 
 def get_cutting_data(
-    bboxes: np.ndarray, kpts: np.ndarray, pcl: np.ndarray, fit_cylinder: bool = True
+    bboxes: np.ndarray,
+    kpts: np.ndarray,
+    tracking_ids: np.ndarray,
+    pcl: np.ndarray,
+    fit_cylinder: bool = True,
 ):
     """
     param fit_cylinder: optionally try to fit cylinder to the lidar kpts with icp algorithm. is slower tho
@@ -201,14 +205,14 @@ def get_cutting_data(
     assert bboxes.shape[0] == kpts.shape[0]  # sanity checks
     assert bboxes.shape[1] == 4 and kpts.shape[1] == 15 and pcl.shape[1] == 3
 
-    cut_xyzs, dim_xyzs = [], []
+    cut_xyzs, dim_xyzs, valid_tracking_ids = [], [], []
 
     pcl = pcl[
         pcl[:, 2] >= 3
     ]  # reject too close points or behind camera (reduces search space)
 
     # fit cylinder to each bbox
-    for bbox, kpts in zip(bboxes, kpts):  # , incl , incl_radians
+    for bbox, kpts, tracking_id in zip(bboxes, kpts, tracking_ids):
         frustum = np.array(  # calculate the frustum points for each bbox corner
             [
                 uv2xyz(bbox[[0, 1]], Z_MIN),
@@ -226,26 +230,30 @@ def get_cutting_data(
         hull = Delaunay(points=frustum)
         inside = pcl[hull.find_simplex(pcl) >= 0]
 
-        if inside.size == 0:
-            continue
-
         try:
+            if inside.size == 0:
+                raise ValueError("No points inside bbox frustum")
+
             # fit a cylinder to the points inside
             if fit_cylinder:
                 height, tree_radius, T_matrix = do_fit_cylinder(kpts=kpts, pcl=inside)
                 cut_xyz = T_matrix[:3, 3]  # translation part of T matrix
             else:
-                height, tree_radius, cut_xyz = project_2dto3d(kpts=kpts, pcl=inside)
+                height, tree_radius, cut_xyz = estimate_3d_tree_data(
+                    kpts=kpts, pcl=inside
+                )
 
             # felling cut 3d coords and 3d bounding box
             dim_xyz = np.array([2 * tree_radius, 2 * tree_radius, height])
 
             cut_xyzs.append(cut_xyz)
             dim_xyzs.append(dim_xyz)
+            valid_tracking_ids.append(tracking_id)
         except Exception as e:
-            rospy.logwarn(e)
+            rospy.loginfo(e)
+
             continue
 
-    if not cut_xyzs:  # Return empty arrays if no cuts were processed
-        return np.empty([0, 3]), np.empty([0, 3])
-    return np.vstack(cut_xyzs), np.vstack(dim_xyzs)
+    if not cut_xyzs or not dim_xyz:  # Return empty arrays if no cuts were processed
+        return np.empty([0, 3]), np.empty([0, 3]), np.empty([0, 0])
+    return np.vstack(cut_xyzs), np.vstack(dim_xyzs), np.vstack(valid_tracking_ids)
