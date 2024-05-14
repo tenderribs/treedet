@@ -164,17 +164,17 @@ class PointCloudTransformer:
             return None
 
 
-def view_trackers(trackers, rgb_img):
-    for t in trackers:
+def view_trackers(tracked, tracked_kpts, rgb_img):
+    for t, kpts in zip(tracked, tracked_kpts):
         p1 = (int(t[0]), int(t[1]))
         p2 = (int(t[2]), int(t[3]))
-        cv2.rectangle(
-            rgb_img,
-            p1,
-            p2,
-            ((t[4] * 75) % 255, (t[4] * 50) % 255, (t[4] * 150) % 255),
-            2,
+
+        color = ((t[4] * 75) % 255, (t[4] * 50) % 255, (t[4] * 150) % 255)
+        cv2.rectangle(rgb_img, p1, p2, color, thickness=2)
+        cv2.circle(
+            rgb_img, (int(kpts[0]), int(kpts[1])), radius=4, color=color, thickness=-1
         )
+
     cv2.imshow("Image with Bounding Boxes", rgb_img)
     cv2.waitKey(2)  # Wait for a key press to close
 
@@ -251,14 +251,22 @@ class CameraSubscriber:
 
         bboxes, confs, kpts = get_detections(output[0], ratio)
         print(f"get_detections:  \t{round((time.perf_counter() - start) * 1000, 1)} ms")
+        print("bboxes\n", bboxes)
 
         # pass the detections through object tracker across frames. Tells us which trees are visible.
-        trackers = self.tree_tracker.update(dets=bboxes)
-        print(f"trackers: {trackers}")
-        view_trackers(trackers, rgb_img)
+        trackers, det_to_id_map = self.tree_tracker.update(dets=bboxes)
+
+        # only estimate 3D bboxes for the tracked trees
+        tracked_bboxes = trackers[:, :4]  # use kalman filtered estimates
+        tracked_kpts = np.zeros((trackers.shape[0], kpts.shape[1]))
+
+        # keep kpts in same order as the tracked bboxes
+        for t_kpts, tracker in zip(tracked_kpts, trackers):
+            det_id = det_to_id_map[tracker[4]]
+            t_kpts[:] = kpts[det_id, :]
+
+        view_trackers(trackers, tracked_kpts, rgb_img)
         return
-        # print(f"bboxes: {bboxes}")
-        print()
         start = time.perf_counter()
         cut_xyz, cut_diam = get_cutting_data(bboxes, kpts, pcl)
         print(f"get_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
