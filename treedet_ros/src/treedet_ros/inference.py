@@ -23,7 +23,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from treedet_ros.cutting_data import get_cutting_data
 from treedet_ros.sort import Sort
 
-RATE_LIMIT = 10.0  # process incoming images at given frequency
+RATE_LIMIT = 5.0  # process incoming images at given frequency
 
 br = CvBridge()
 
@@ -164,6 +164,21 @@ class PointCloudTransformer:
             return None
 
 
+def view_trackers(trackers, rgb_img):
+    for t in trackers:
+        p1 = (int(t[0]), int(t[1]))
+        p2 = (int(t[2]), int(t[3]))
+        cv2.rectangle(
+            rgb_img,
+            p1,
+            p2,
+            ((t[4] * 75) % 255, (t[4] * 50) % 255, (t[4] * 150) % 255),
+            2,
+        )
+    cv2.imshow("Image with Bounding Boxes", rgb_img)
+    cv2.waitKey(2)  # Wait for a key press to close
+
+
 class CameraSubscriber:
     def __init__(self):
         package_path = rospkg.RosPack().get_path("treedet_ros")
@@ -173,8 +188,10 @@ class CameraSubscriber:
 
         self.data_buffer = ([], [])  # RGB, Depth
 
-        self.tree_tracker = Sort()
-        self.tree_index = {}
+        self.tree_tracker = Sort(
+            max_age=2,
+            min_hits=3,
+        )
 
         # lock prevents simulataneous R/W to the buffer
         self.lock = threading.Lock()
@@ -235,18 +252,17 @@ class CameraSubscriber:
         bboxes, confs, kpts = get_detections(output[0], ratio)
         print(f"get_detections:  \t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
+        # pass the detections through object tracker across frames. Tells us which trees are visible.
         trackers = self.tree_tracker.update(dets=bboxes)
-        print(trackers)
-
+        print(f"trackers: {trackers}")
+        view_trackers(trackers, rgb_img)
         return
+        # print(f"bboxes: {bboxes}")
+        print()
         start = time.perf_counter()
         cut_xyz, cut_diam = get_cutting_data(bboxes, kpts, pcl)
         print(f"get_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
-        # pass the detections through object tracker across frames. Tells us which trees are visible.
-
-        for d in trackers:
-            self.tree_index
         # transform the cutting point coordinates into map frame
         out_pcd = np_to_pcd2(cut_xyz)
         out_pcd = self.pcl_transformer.tf(
