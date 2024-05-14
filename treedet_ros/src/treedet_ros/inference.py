@@ -18,8 +18,8 @@ from typing import Union
 # from visualization_msgs.msg import MarkerArray
 
 from treedet_ros.cutting_data import get_cutting_data
-from treedet_ros.sort import Sort
-# from treedet_ros.rviz import point_markers, np_to_markers
+from treedet_ros.src.treedet_ros.sort_tracker import Sort
+from treedet_ros.rviz import point_markers, np_to_markers, view_trackers
 
 RATE_LIMIT = 5.0  # process incoming images at given frequency
 
@@ -113,19 +113,7 @@ class PointCloudTransformer:
             return None
 
 
-def view_trackers(tracked, tracked_kpts, rgb_img):
-    for t, kpts in zip(tracked, tracked_kpts):
-        p1 = (int(t[0]), int(t[1]))
-        p2 = (int(t[2]), int(t[3]))
 
-        color = ((t[4] * 75) % 255, (t[4] * 50) % 255, (t[4] * 150) % 255)
-        cv2.rectangle(rgb_img, p1, p2, color, thickness=2)
-        cv2.circle(
-            rgb_img, (int(kpts[0]), int(kpts[1])), radius=4, color=color, thickness=-1
-        )
-
-    cv2.imshow("Image with Bounding Boxes", rgb_img)
-    cv2.waitKey(2)  # Wait for a key press to close
 
 
 class TreeDetector:
@@ -187,7 +175,7 @@ class TreeDetector:
                 )
 
                 if lidar_pcl:
-                    lidar_pcl: np.ndarray = pc2_to_np(lidar_pcl)
+                    lidar_pcl: np.ndarray = pc2_to_np, view_trackers(lidar_pcl)
                     self.process(rgb_img, lidar_pcl)
 
                 self.data_buffer = ([], [])

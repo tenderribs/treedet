@@ -1,4 +1,6 @@
 import tf.transformations
+import cv2
+
 from geometry_msgs.msg import Quaternion
 
 from visualization_msgs.msg import Marker, MarkerArray
@@ -51,3 +53,18 @@ def np_to_markers(XYZ, dims, frame_id):
 
         marker_array.markers.append(m)
     return marker_array
+
+
+def view_trackers(tracked, tracked_kpts, rgb_img):
+    for t, kpts in zip(tracked, tracked_kpts):
+        p1 = (int(t[0]), int(t[1]))
+        p2 = (int(t[2]), int(t[3]))
+
+        color = ((t[4] * 75) % 255, (t[4] * 50) % 255, (t[4] * 150) % 255)
+        cv2.rectangle(rgb_img, p1, p2, color, thickness=2)
+        cv2.circle(
+            rgb_img, (int(kpts[0]), int(kpts[1])), radius=4, color=color, thickness=-1
+        )
+
+    cv2.imshow("Image with Bounding Boxes", rgb_img)
+    cv2.waitKey(2)  # Wait for a key press to close
