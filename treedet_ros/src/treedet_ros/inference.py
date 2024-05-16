@@ -22,11 +22,14 @@ from treedet_ros.sort_tracker import Sort
 from treedet_ros.bbox import tree_data_to_bbox
 from treedet_ros.rviz import view_trackers
 
-RATE_LIMIT = 5.0  # process incoming images at given frequency
+RATE_LIMIT = 5.0
 
 br = CvBridge()
 
 detection_pub = rospy.Publisher("/tree_det/felling_cut", PointCloud2, queue_size=10)
+new_detection_pub = rospy.Publisher(
+    "/tree_det/new_felling_cut", PointCloud2, queue_size=10
+)
 # marker_pub = rospy.Publisher("/tree_det/markers", MarkerArray, queue_size=10)
 
 
@@ -121,11 +124,9 @@ class TreeDetector:
 
         self.tree_index = {}
         self.frame_count = 0
-        self.max_age = 2
+        self.max_age = 3
 
-        self.tree_tracker = Sort(
-            max_age=self.max_age,
-        )
+        self.tree_tracker = Sort()
 
         self.lock = threading.Lock()  # lock prevents simulataneous R/W to the buffer
 
@@ -181,6 +182,15 @@ class TreeDetector:
         """Update the tree index with new cutting data"""
         assert cut_xyzs.shape[0] == cut_boxes.shape[0]
 
+        # remove stale trees
+        to_del = []
+        self.frame_count += 1
+        for tracking_id, data in self.tree_index.items():
+            if self.frame_count - data[-1][6] > 5:
+                to_del.append(tracking_id)
+        for tracking_id in to_del:
+            del self.tree_index[tracking_id]
+
         # add the trees if available
         if cut_xyzs.shape[0] > 0:
             # remember the time that we found the tree
@@ -193,18 +203,11 @@ class TreeDetector:
 
             for new_d, tracking_id in zip(new_tree_data, trackers[:, 4]):
                 if tracking_id in self.tree_index:
+                    print("existing tree")
                     self.tree_index[tracking_id].append(new_d)
                 else:
+                    print("adding new tree")
                     self.tree_index[tracking_id] = [new_d]
-
-        # remove stale trees
-        to_del = []
-        self.frame_count += 1
-        for tracking_id, data in self.tree_index.items():
-            if self.frame_count - data[-1][6] > self.max_age:
-                to_del.append(tracking_id)
-        for tracking_id in to_del:
-            del self.tree_index[tracking_id]
 
     def fetch_tree_data(self):
         """Read the tree index and prepare an average of values"""
@@ -237,6 +240,7 @@ class TreeDetector:
         start = time.perf_counter()
         cut_xyzs, cut_boxes = get_cutting_data(bboxes, kpts, pcl, fit_cylinder=False)
 
+        # view_trackers(cut_boxes, rgb_img)
         assert cut_xyzs.shape[0] == cut_boxes.shape[0]
 
         map_cut_pcd = self.pcl_transformer.tf(
@@ -246,7 +250,7 @@ class TreeDetector:
         )
 
         bboxes = tree_data_to_bbox(cam_cut_xyzs=cut_xyzs, cut_boxes=cut_boxes)
-
+        view_trackers(bboxes, rgb_img)
         self.update_tree_index(
             cut_xyzs=pc2_to_np(map_cut_pcd), cut_boxes=cut_boxes, bboxes=bboxes
         )
@@ -259,6 +263,7 @@ class TreeDetector:
 
         # transform the cutting point coordinates in map frame
         detection_pub.publish(np_to_pcd2(XYZ=map_tree_data[:, :3], frame="map"))
+        new_detection_pub.publish(map_cut_pcd)
 
 
 def main():

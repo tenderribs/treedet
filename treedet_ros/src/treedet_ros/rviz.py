@@ -58,10 +58,9 @@ def np_to_markers(XYZ, dims, frame_id):
 
 def view_trackers(bboxes, rgb_img):
     for t in bboxes:
-        print(t)
         if np.isnan(t).any():
+            print("detected NAN")
             continue
-        print(t)
         p1 = (int(t[0]), int(t[1]))
         p2 = (int(t[2]), int(t[3]))
 
