@@ -43,7 +43,7 @@ def np_to_markers(XYZ, dims, frame_id):
         m.scale.z = dim[2]
         m.pose.position.x = point[0]
         m.pose.position.y = point[1]
-        m.pose.position.z = point[2]
+        m.pose.position.z = point[2] + dim[2] / 2
         m.color.a = 1.0
         m.color.r = 1.0
         m.color.g = 0.0

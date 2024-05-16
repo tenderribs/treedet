@@ -15,19 +15,20 @@ from sensor_msgs.msg import CompressedImage
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
 
-# from visualization_msgs.msg import MarkerArray
+from visualization_msgs.msg import MarkerArray
 
 from treedet_ros.cutting_data import get_cutting_data
 from treedet_ros.sort_tracker import Sort
-from treedet_ros.bbox import tree_data_to_bbox  # , find_overlapping_tree_id
-from treedet_ros.rviz import view_trackers
+
+# from treedet_ros.bbox import tree_data_to_bbox
+from treedet_ros.rviz import np_to_markers
 
 RATE_LIMIT = 5.0  # process incoming images at given frequency
 
 br = CvBridge()
 
 detection_pub = rospy.Publisher("/tree_det/felling_cut", PointCloud2, queue_size=10)
-# marker_pub = rospy.Publisher("/tree_det/markers", MarkerArray, queue_size=10)
+marker_pub = rospy.Publisher("/tree_det/markers", MarkerArray, queue_size=10)
 
 
 def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
@@ -185,7 +186,7 @@ class TreeDetector:
         to_del = []
         self.frame_count += 1
         for tracking_id, data in self.tree_index.items():
-            if self.frame_count - self.tree_index[tracking_id][-1][6] > 10:
+            if self.frame_count - self.tree_index[tracking_id][-1][6] > RATE_LIMIT:
                 to_del.append(tracking_id)
 
         for tracking_id in to_del:
@@ -239,8 +240,6 @@ class TreeDetector:
             det_id = det_to_id_map[tracking_id]
             t_kpts[:] = kpts[det_id, :]
 
-        # view_trackers(trackers, tracked_kpts, rgb_img)
-
         # extract cutting info from the tracked trees
         start = time.perf_counter()
         cut_xyzs, cut_boxes, tracking_ids = get_cutting_data(
@@ -270,7 +269,10 @@ class TreeDetector:
         )
 
         # transform the cutting point coordinates in map frame
-        detection_pub.publish(np_to_pcd2(XYZ=map_tree_data[:, :3], frame="map"))
+        # detection_pub.publish(np_to_pcd2(XYZ=map_tree_data[:, :3], frame="map"))
+        marker_pub.publish(
+            np_to_markers(map_tree_data[:, :3], map_tree_data[:, 3:6], "map")
+        )
 
 
 def main():
