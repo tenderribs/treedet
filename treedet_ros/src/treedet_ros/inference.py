@@ -19,7 +19,8 @@ from sensor_msgs import point_cloud2
 
 from treedet_ros.cutting_data import get_cutting_data
 from treedet_ros.sort_tracker import Sort
-from treedet_ros.bbox import tree_data_to_bbox, find_overlapping_tree_id
+from treedet_ros.bbox import tree_data_to_bbox  # , find_overlapping_tree_id
+from treedet_ros.rviz import view_trackers
 
 RATE_LIMIT = 5.0  # process incoming images at given frequency
 
@@ -52,12 +53,8 @@ def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
     return np.ascontiguousarray(padded_img, dtype=np.float32), r
 
 
-def np_to_pcd2(
-    XYZ: np.ndarray,
-) -> PointCloud2:
-    header = rospy.Header(
-        frame_id="zed2i_left_camera_optical_frame", stamp=rospy.Time.now()
-    )
+def np_to_pcd2(XYZ: np.ndarray, frame: str) -> PointCloud2:
+    header = rospy.Header(frame_id=frame, stamp=rospy.Time.now())
     fields = [
         PointField("x", 0, PointField.FLOAT32, 1),
         PointField("y", 4, PointField.FLOAT32, 1),
@@ -123,10 +120,11 @@ class TreeDetector:
         self.data_buffer = ([], [])  # RGB, Depth
 
         self.tree_index = {}
+        self.frame_count = 0
+        self.max_age = 2
 
         self.tree_tracker = Sort(
-            max_age=2,
-            min_hits=3,
+            max_age=self.max_age,
         )
 
         self.lock = threading.Lock()  # lock prevents simulataneous R/W to the buffer
@@ -178,52 +176,47 @@ class TreeDetector:
                 self.data_buffer = ([], [])
 
     def update_tree_index(
-        self, cut_xyzs: np.ndarray, cut_boxes: np.ndarray, tracking_ids: np.ndarray
+        self, cut_xyzs: np.ndarray, cut_boxes: np.ndarray, tracking_ids: list
     ) -> None:
         """Update the tree index with new cutting data"""
+        assert cut_xyzs.shape[0] == cut_boxes.shape[0]
 
-        new_tree_data = np.hstack((cut_xyzs, cut_boxes))
+        # remove old trees
+        to_del = []
+        self.frame_count += 1
+        for tracking_id, data in self.tree_index.items():
+            if self.frame_count - self.tree_index[tracking_id][-1][6] > 10:
+                to_del.append(tracking_id)
 
-        existing_tree_data, existing_tracking_ids = self.fetch_tree_data()
-        existing_bboxes = tree_data_to_bbox(existing_tree_data)
-        print("called first one")
-        for new_d, tracking_id in zip(new_tree_data, tracking_ids):
-            id = tracking_id[0]
+        for tracking_id in to_del:
+            del self.tree_index[tracking_id]
 
-            new_bbox = tree_data_to_bbox(new_d.reshape(1, -1))  # needs reshape 1d to 2d
+        # add the new trees
+        if cut_xyzs.shape[0] > 0:
+            # remember the time that we found the tree
+            frame_tag = np.full((cut_xyzs.shape[0], 1), self.frame_count)
+            new_tree_data = np.hstack((cut_xyzs, cut_boxes, frame_tag))
 
-            # sometimes the tracker forgets loses track and then locks onto a tree again.
-            # must prevent duplicates in our tree index:
-            already_found_id = find_overlapping_tree_id(
-                existing_bboxes, new_bbox, existing_tracking_ids
-            )
-
-            # prefer adding to existing entry vs. creating new
-            if already_found_id:
-                id = already_found_id
-
-            if id in self.tree_index:
-                self.tree_index[id].append(new_d)
-            else:
-                self.tree_index[id] = [new_d]
+            for new_d, tracking_id in zip(new_tree_data, tracking_ids):
+                if tracking_id in self.tree_index:
+                    self.tree_index[tracking_id].append(new_d)
+                else:
+                    self.tree_index[tracking_id] = [new_d]
 
     def fetch_tree_data(self):
         """Read the tree index and prepare an average of values"""
-        ret_tracking_ids = []
+        # ret_tracking_ids = []
         ret_tree_data = []
 
         for t_id, tree_data in self.tree_index.items():
-            if len(tree_data) == 0:
-                continue
-
             # compute the mean of existing values
             tree_data = np.vstack(tree_data)
             ret_tree_data.append(np.mean(tree_data, axis=0))
-            ret_tracking_ids.append(t_id)
+            # ret_tracking_ids.append(t_id)
 
         if len(ret_tree_data) > 0:
-            return np.vstack(ret_tree_data), ret_tracking_ids
-        return None, None
+            return np.vstack(ret_tree_data)  # , ret_tracking_ids
+        return np.empty((0, 7))  # , []
 
     def process(self, rgb_img: np.ndarray, pcl: np.ndarray):
         # pass image through model
@@ -254,28 +247,30 @@ class TreeDetector:
             trackers[:, :4], tracked_kpts, trackers[:, 4], pcl, fit_cylinder=False
         )
 
-        assert (
-            cut_xyzs.shape[0] == cut_boxes.shape[0]
-            and cut_boxes.shape[0] == tracking_ids.shape[0]
+        assert cut_xyzs.shape[0] == cut_boxes.shape[0] and cut_boxes.shape[0] == len(
+            tracking_ids
+        )
+
+        map_cut_pcd = self.pcl_transformer.tf(
+            np_to_pcd2(cut_xyzs, "zed2i_left_camera_optical_frame"),
+            "zed2i_left_camera_optical_frame",
+            "map",
         )
 
         self.update_tree_index(
-            cut_xyzs=cut_xyzs, cut_boxes=cut_boxes, tracking_ids=tracking_ids
+            cut_xyzs=pc2_to_np(map_cut_pcd),
+            cut_boxes=cut_boxes,
+            tracking_ids=tracking_ids,
         )
 
-        print(f"get_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
+        map_tree_data = self.fetch_tree_data()
 
-        return
-        # transform the cutting point coordinates into map frame
-        out_pcd = np_to_pcd2(cut_xyz)
-        out_pcd = self.pcl_transformer.tf(
-            out_pcd, "zed2i_left_camera_optical_frame", "map"
+        print(
+            f"extract_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms"
         )
-        detection_pub.publish(out_pcd)
-        cut_xyz_map_np = pc2_to_np(out_pcd)
 
-        # # these markers look wonky in z-axis because pivot point of cylinder marker is at center. tree hence appear to go underground
-        # marker_pub.publish(np_to_markers(pc2_to_np(out_pcd), cut_diam, "map"))
+        # transform the cutting point coordinates in map frame
+        detection_pub.publish(np_to_pcd2(XYZ=map_tree_data[:, :3], frame="map"))
 
 
 def main():
