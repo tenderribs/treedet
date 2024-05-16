@@ -94,20 +94,16 @@ def estimate_3d_tree_data(kpts: np.ndarray, pcl: np.ndarray):
     w_ax2 = ray_vec(kpts[12:14])
 
     # calculate the width of the tree as average of 3D eucl. dist from cut kpt to left and right kpts resp.
-    radius = 0.2
-    # left = estimate_3d(pcl, w_l)
-    # right = estimate_3d(pcl, w_r)
+    left = estimate_3d(pcl, w_l)
+    right = estimate_3d(pcl, w_r)
+    radius = np.sqrt(np.sum((left - right) ** 2)) / 2
 
-    # radius = np.sqrt(np.sum((left - right) ** 2)) / 2
-    # print(f"left:{left}")
-    # print(f"right:{right}")
-    # print(f"radius: {radius}")
-    # if abs(np.linalg.norm(left) - np.linalg.norm(right)) >= 0.3:
-    #     raise ValueError("Edge keypoints have too large depth difference")
+    if abs(np.linalg.norm(left) - np.linalg.norm(right)) >= 0.3:
+        raise ValueError("Edge keypoints have too large depth difference")
 
     # calculate height limited to x meters
     height = np.sqrt(np.sum((estimate_3d(pcl, w_fc) - estimate_3d(pcl, w_ax2)) ** 2))
-    height = min(height, 2.0)
+    # height = min(height, 2.0)
 
     fc3d = estimate_3d(pcl, w_fc)
     return (

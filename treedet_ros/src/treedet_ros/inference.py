@@ -175,40 +175,36 @@ class TreeDetector:
 
                 self.data_buffer = ([], [])
 
-    # def update_tree_index(
-    #     self, cut_xyzs: np.ndarray, cut_boxes: np.ndarray, bboxes: np.ndarray
-    # ) -> None:
-    #     """Update the tree index with new cutting data"""
-    #     assert cut_xyzs.shape[0] == cut_boxes.shape[0]
+    def update_tree_index(
+        self, cut_xyzs: np.ndarray, cut_boxes: np.ndarray, bboxes: np.ndarray
+    ) -> None:
+        """Update the tree index with new cutting data"""
+        assert cut_xyzs.shape[0] == cut_boxes.shape[0]
 
-    #     # add the trees if available
-    #     if cut_xyzs.shape[0] > 0:
-    #         # remember the time that we found the tree
-    #         frame_tag = np.full((cut_xyzs.shape[0], 1), self.frame_count)
-    #         new_tree_data = np.hstack((cut_xyzs, cut_boxes, frame_tag))
+        # add the trees if available
+        if cut_xyzs.shape[0] > 0:
+            # remember the time that we found the tree
+            frame_tag = np.full((cut_xyzs.shape[0], 1), self.frame_count)
+            new_tree_data = np.hstack((cut_xyzs, cut_boxes, frame_tag))
 
-    #         bboxes = tree_data_to_bbox(new_tree_data[:, :6])
+            # pass the detections through object tracker across frames. Tells us which trees are visible.
+            # trackers: [:, bbox x1 y1 x2 y2, tracking_id]
+            trackers, det_to_id_map = self.tree_tracker.update(dets=bboxes)
 
-    #         # pass the detections through object tracker across frames. Tells us which trees are visible.
-    #         # trackers: [:, bbox x1 y1 x2 y2, tracking_id]
-    #         trackers, det_to_id_map = self.tree_tracker.update(dets=bboxes)
+            for new_d, tracking_id in zip(new_tree_data, trackers[:, 4]):
+                if tracking_id in self.tree_index:
+                    self.tree_index[tracking_id].append(new_d)
+                else:
+                    self.tree_index[tracking_id] = [new_d]
 
-    #         # view_trackers(trackers, tracked_kpts, rgb_img)
-
-    #         for new_d, tracking_id in zip(new_tree_data, tracking_ids):
-    #             if tracking_id in self.tree_index:
-    #                 self.tree_index[tracking_id].append(new_d)
-    #             else:
-    #                 self.tree_index[tracking_id] = [new_d]
-
-    #     # remove stale trees
-    #     to_del = []
-    #     self.frame_count += 1
-    #     for tracking_id, data in self.tree_index.items():
-    #         if self.frame_count - data[-1][6] > self.max_age:
-    #             to_del.append(tracking_id)
-    #     for tracking_id in to_del:
-    #         del self.tree_index[tracking_id]
+        # remove stale trees
+        to_del = []
+        self.frame_count += 1
+        for tracking_id, data in self.tree_index.items():
+            if self.frame_count - data[-1][6] > self.max_age:
+                to_del.append(tracking_id)
+        for tracking_id in to_del:
+            del self.tree_index[tracking_id]
 
     def fetch_tree_data(self):
         """Read the tree index and prepare an average of values"""
@@ -240,8 +236,7 @@ class TreeDetector:
 
         start = time.perf_counter()
         cut_xyzs, cut_boxes = get_cutting_data(bboxes, kpts, pcl, fit_cylinder=False)
-        print(f"cut_xyzs:\n{cut_xyzs}")
-        print(f"cut_boxes:\n{cut_boxes}")
+
         assert cut_xyzs.shape[0] == cut_boxes.shape[0]
 
         map_cut_pcd = self.pcl_transformer.tf(
@@ -251,10 +246,7 @@ class TreeDetector:
         )
 
         bboxes = tree_data_to_bbox(cam_cut_xyzs=cut_xyzs, cut_boxes=cut_boxes)
-        view_trackers(bboxes, rgb_img)
-        print(f"bboxes:\n{bboxes}")
-        print("\n\n\n\n\n")
-        return
+
         self.update_tree_index(
             cut_xyzs=pc2_to_np(map_cut_pcd), cut_boxes=cut_boxes, bboxes=bboxes
         )
