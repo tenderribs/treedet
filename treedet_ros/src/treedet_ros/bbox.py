@@ -3,18 +3,27 @@ from typing import Union
 
 
 def tree_data_to_bbox(tree_data: Union[np.ndarray, None]) -> np.ndarray:
-    """return the tree bbox as seen from a birds eye view"""
-    if (tree_data is None) or (tree_data.shape[0] == 0):
-        return None
+    """return bbox coordinates of tree trunk in the map frame"""
+    assert tree_data.shape[1] == 6
 
-    cut_xyz, cut_box = tree_data[:, :3], tree_data[:, 3:]
+    # cylinder params: center, radius height
+    xc = tree_data[:, 0]
+    yc = tree_data[:, 1]
+    r = tree_data[:, 3]
+    h = tree_data[:, 5]
 
-    xc, yc = cut_xyz[:, 0], cut_xyz[:, 1]
-    xrad, yrad = cut_box[:, 0] / 2, cut_box[:, 1] / 2  # get radius of tree
+    d = np.sqrt(xc**2 + yc**2)
+    l = np.sqrt(d**2 - r**2)
 
-    x1, y1 = xc - xrad, yc - yrad
-    x2, y2 = xc + xrad, yc + yrad
-    return np.vstack([x1, y1, x2, y2]).T
+    theta = np.arctan2(yc, xc)
+    phi = np.arcsin(r, d)
+
+    x1 = l * np.cos(theta + phi)
+    y1 = l * np.sin(theta + phi)
+    x2 = l * np.cos(theta - phi)
+    y2 = l * np.sin(theta - phi)
+
+    return
 
 
 def find_overlapping_tree_id(

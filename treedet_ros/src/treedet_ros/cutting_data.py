@@ -92,11 +92,14 @@ def estimate_3d_tree_data(kpts: np.ndarray, pcl: np.ndarray):
     w_r = ray_vec(kpts[6:8])
     w_ax2 = ray_vec(kpts[12:14])
 
-    # calculate the width of the tree based on initial estimate
-    radius = np.sqrt(np.sum((estimate_3d(pcl, w_l) - estimate_3d(pcl, w_r)) ** 2)) / 2
+    # calculate the width of the tree as average of 3D eucl. dist from cut kpt to left and right kpts resp.
+    rad_left = np.sqrt(np.sum((estimate_3d(pcl, w_l) - estimate_3d(pcl, w_fc)) ** 2))
+    rad_right = np.sqrt(np.sum((estimate_3d(pcl, w_r) - estimate_3d(pcl, w_fc)) ** 2))
+    radius = (rad_left + rad_right) / 2
 
-    # calculate height
+    # calculate height limited to x meters
     height = np.sqrt(np.sum((estimate_3d(pcl, w_fc) - estimate_3d(pcl, w_ax2)) ** 2))
+    height = min(height, 2.0)
 
     fc3d = estimate_3d(pcl, w_fc)
     return (
@@ -253,5 +256,5 @@ def get_cutting_data(
             continue
 
     if len(cut_xyzs) == 0 or len(dim_xyzs) == 0:
-        return np.empty([0, 3]), np.empty([0, 3]), np.empty([0, 0])
-    return np.vstack(cut_xyzs), np.vstack(dim_xyzs), np.vstack(valid_tracking_ids)
+        return np.empty([0, 3]), np.empty([0, 3]), valid_tracking_ids
+    return np.vstack(cut_xyzs), np.vstack(dim_xyzs), valid_tracking_ids
