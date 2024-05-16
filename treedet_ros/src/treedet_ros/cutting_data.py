@@ -27,18 +27,19 @@ Z_MAX = 20
 def uv2xyz(uv: np.ndarray, Z: float):
     """
     Conv pixel coords to world coords in zed2i frame with pinhole camera model
-
     """
     X = (uv[0] - cx) * Z / fx
     Y = (uv[1] - cy) * Z / fy
     return [X, Y, Z]
 
 
-# def uv2incl(ax1: np.ndarray, fc: np.ndarray) -> np.ndarray:
-#     """Get counter-clockwise inclination in radians of tree w.r.t the "upwards" vertical axis"""
-#     du = fc[:, 0] - ax1[:, 0]
-#     dv = fc[:, 1] - ax1[:, 1]
-#     return -(np.pi / 2 + np.arctan2(du, dv))
+def xyz2uv(x, y, z):
+    """
+    Conv pixel coords to world coords in zed2i frame with pinhole camera model
+    """
+    u = cx + x * fx / z
+    v = cy + y * fy / z
+    return u, v
 
 
 def ray_vec(kpt: np.ndarray):
@@ -56,7 +57,9 @@ def estimate_3d(pcl: np.ndarray, ray_vec: np.ndarray):
     Projects ray vector into 3d space and then computes average of the closest points to the ray
     param ray_vec: should be normalized!
     """
-    closest_num = 4
+    # choose smallish closest_num because far trees have sparse pcls -> bad estimates
+    closest_num = 3
+    threshold_distance = 0.3
     if pcl.size < closest_num:
         raise ValueError("Not enough points in pcl")
 
@@ -66,8 +69,6 @@ def estimate_3d(pcl: np.ndarray, ray_vec: np.ndarray):
             key=lambda p: np.linalg.norm(np.cross(p, ray_vec)),
         )
     )
-
-    threshold_distance = 0.4
 
     if np.linalg.norm(np.cross(pcl[0], ray_vec)) > threshold_distance:
         raise ValueError("Closest point is too far from ray")
@@ -93,9 +94,16 @@ def estimate_3d_tree_data(kpts: np.ndarray, pcl: np.ndarray):
     w_ax2 = ray_vec(kpts[12:14])
 
     # calculate the width of the tree as average of 3D eucl. dist from cut kpt to left and right kpts resp.
-    rad_left = np.sqrt(np.sum((estimate_3d(pcl, w_l) - estimate_3d(pcl, w_fc)) ** 2))
-    rad_right = np.sqrt(np.sum((estimate_3d(pcl, w_r) - estimate_3d(pcl, w_fc)) ** 2))
-    radius = (rad_left + rad_right) / 2
+    radius = 0.2
+    # left = estimate_3d(pcl, w_l)
+    # right = estimate_3d(pcl, w_r)
+
+    # radius = np.sqrt(np.sum((left - right) ** 2)) / 2
+    # print(f"left:{left}")
+    # print(f"right:{right}")
+    # print(f"radius: {radius}")
+    # if abs(np.linalg.norm(left) - np.linalg.norm(right)) >= 0.3:
+    #     raise ValueError("Edge keypoints have too large depth difference")
 
     # calculate height limited to x meters
     height = np.sqrt(np.sum((estimate_3d(pcl, w_fc) - estimate_3d(pcl, w_ax2)) ** 2))
@@ -195,7 +203,6 @@ def do_fit_cylinder(kpts: np.ndarray, pcl: np.ndarray):
 def get_cutting_data(
     bboxes: np.ndarray,
     kpts: np.ndarray,
-    tracking_ids: np.ndarray,
     pcl: np.ndarray,
     fit_cylinder: bool = True,
 ):
@@ -206,14 +213,17 @@ def get_cutting_data(
     assert bboxes.shape[0] == kpts.shape[0]  # sanity checks
     assert bboxes.shape[1] == 4 and kpts.shape[1] == 15 and pcl.shape[1] == 3
 
-    cut_xyzs, dim_xyzs, valid_tracking_ids = [], [], []
+    cut_xyzs, dim_xyzs = [], []
 
-    pcl = pcl[
-        pcl[:, 2] >= 3
-    ]  # reject too close points or behind camera (reduces search space)
+    # reject points out of bounds
+    pcl = pcl[pcl[:, 2] >= Z_MIN]
+    pcl = pcl[pcl[:, 2] <= Z_MAX]
+
+    # TODO: remove this once robot_self_filter is enabled!
+    pcl = pcl[pcl[:, 2] >= 3]
 
     # fit cylinder to each bbox
-    for bbox, kpts, tracking_id in zip(bboxes, kpts, tracking_ids):
+    for bbox, kpts in zip(bboxes, kpts):
         frustum = np.array(  # calculate the frustum points for each bbox corner
             [
                 uv2xyz(bbox[[0, 1]], Z_MIN),
@@ -226,7 +236,6 @@ def get_cutting_data(
                 uv2xyz(bbox[[2, 3]], Z_MAX),
             ]
         )
-
         # filter pointcloud for each frustum (only search pcl within)
         hull = Delaunay(points=frustum)
         inside = pcl[hull.find_simplex(pcl) >= 0]
@@ -249,12 +258,11 @@ def get_cutting_data(
 
             cut_xyzs.append(cut_xyz)
             dim_xyzs.append(dim_xyz)
-            valid_tracking_ids.append(tracking_id)
         except Exception as e:
             rospy.loginfo(e)
 
             continue
 
     if len(cut_xyzs) == 0 or len(dim_xyzs) == 0:
-        return np.empty([0, 3]), np.empty([0, 3]), valid_tracking_ids
-    return np.vstack(cut_xyzs), np.vstack(dim_xyzs), valid_tracking_ids
+        return np.empty([0, 3]), np.empty([0, 3])
+    return np.vstack(cut_xyzs), np.vstack(dim_xyzs)

@@ -1,60 +1,47 @@
 import numpy as np
-from typing import Union
+from treedet_ros.cutting_data import xyz2uv
 
 
-def tree_data_to_bbox(tree_data: Union[np.ndarray, None]) -> np.ndarray:
-    """return bbox coordinates of tree trunk in the map frame"""
-    assert tree_data.shape[1] == 6
+def tree_data_to_bbox(cam_cut_xyzs: np.ndarray, cut_boxes) -> np.ndarray:
+    """
+    return bbox coordinates of tree trunk IN THE CAMERA FRAME
+    """
+    assert cam_cut_xyzs.shape[1] == 3 and cut_boxes.shape[1] == 3
 
-    # cylinder params: center, radius height
-    xc = tree_data[:, 0]
-    yc = tree_data[:, 1]
-    r = tree_data[:, 3]
-    h = tree_data[:, 5]
+    print(f"cam_cut_xyzs:\n{cam_cut_xyzs}")
+    print(f"cut_boxes:\n{cut_boxes}")
 
-    d = np.sqrt(xc**2 + yc**2)
-    l = np.sqrt(d**2 - r**2)
+    # cylinder params: center, base, radius height
+    xc = cam_cut_xyzs[:, 0]
+    y0 = cam_cut_xyzs[:, 1]
+    zc = cam_cut_xyzs[:, 2]
+    r = cut_boxes[:, 0] / 2
+    h = cut_boxes[:, 2]
 
-    theta = np.arctan2(yc, xc)
-    phi = np.arcsin(r, d)
+    d = np.sqrt(xc**2 + zc**2)
+    l1 = np.sqrt(d**2 - r**2)
 
-    x1 = l * np.cos(theta + phi)
-    y1 = l * np.sin(theta + phi)
-    x2 = l * np.cos(theta - phi)
-    y2 = l * np.sin(theta - phi)
+    print(f"r:\t{r}")
+    print(f"xc:\t{xc}")
+    print(f"zc:\t{zc}")
+    print(f"d:\t{d}")
+    print(f"l1:\t{l1}")
 
-    return
+    # xc == 0 and / or d == 0 imply the tree lies in origin, should be impossible
+    # assert np.all(xc != 0, axis=0) and np.all(d != 0, axis=0)
+    theta = np.arctan2(zc, xc)
+    phi = np.arctan2(r, l1)
 
+    x1 = l1 * np.cos(theta + phi)
+    z1 = l1 * np.sin(theta + phi)
+    x2 = l1 * np.cos(theta - phi)
+    z2 = l1 * np.sin(theta - phi)
 
-def find_overlapping_tree_id(
-    ex_bboxes: Union[np.ndarray, None],
-    new_bbox: np.ndarray,
-    tracking_ids: np.ndarray,
-    iou_thresh: float = 0.3,
-) -> Union[int, None]:
-    if (ex_bboxes is None) or (ex_bboxes.shape[0] == 0):
-        return None
-    print("in find_overlapping")
-    new_bbox = new_bbox[0]
-    x1, y1, x2, y2 = new_bbox
-    bboxes_x1 = ex_bboxes[:, 0]
-    bboxes_y1 = ex_bboxes[:, 1]
-    bboxes_x2 = ex_bboxes[:, 2]
-    bboxes_y2 = ex_bboxes[:, 3]
-    print(bboxes_x1)
-    # coordinates of the intersection
-    print(f"x1.shape: {x1.shape}")
-    print(f"bbxox1.shape: {bboxes_x1.shape}")
-    i_x1 = np.max(x1, bboxes_x1)
-    i_y1 = np.max(y1, bboxes_y1)
-    i_x2 = np.min(x2, bboxes_x2)
-    i_y2 = np.min(y2, bboxes_y2)
-    inter_area = np.max(0, i_x2 - i_x1) * np.max(0, i_y2 - i_y1)
+    print(f"x1:\t{x1}")
+    print(f"z1:\t{z1}")
+    print(f"x2:\t{x2}")
+    print(f"z2:\t{z2}")
 
-    single_bbox_area = (x2 - x1) * (y2 - y1)
-    all_area = (bboxes_x2 - bboxes_x1) * (bboxes_y2 - bboxes_y1)
-
-    union_area = single_bbox_area + all_area - inter_area
-    iou = inter_area / union_area
-    print(iou)
-    assert False
+    u1, v1 = xyz2uv(x1, y0 - h, z1)  # top point
+    u2, v2 = xyz2uv(x2, y0, z2)  # bottom right
+    return np.vstack((u1, v1, u2, v2)).T
