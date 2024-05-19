@@ -88,7 +88,7 @@ def shutdown_hook():
 
 
 if __name__ == "__main__":
-    rospy.init_node("Target Selection")
+    rospy.init_node("treedet_target_selector")
     server = InteractiveMarkerServer("bounding_box_markers")
 
     rospy.Subscriber(
