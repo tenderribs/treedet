@@ -1,26 +1,27 @@
-import threading
-import rospy
-import onnxruntime
-import rospkg
-import os
-import numpy as np
 import cv2
-import time
+import numpy as np
+import onnxruntime
+import os
+import ros_numpy
+import rospy
+import rospkg
+import threading
 import tf2_ros
 import tf2_sensor_msgs
-import tf.transformations
-import ros_numpy
+import time
 
 from cv_bridge import CvBridge
-from sensor_msgs.msg import Image, CompressedImage
+from sensor_msgs.msg import CompressedImage
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
 
-from geometry_msgs.msg import Quaternion
-
-from visualization_msgs.msg import Marker, MarkerArray
+from visualization_msgs.msg import MarkerArray
 
 from treedet_ros.cutting_data import get_cutting_data
+from treedet_ros.sort_tracker import Sort
+
+# from treedet_ros.bbox import tree_data_to_bbox
+from treedet_ros.rviz import np_to_markers
 
 RATE_LIMIT = 5.0  # process incoming images at given frequency
 
@@ -53,12 +54,8 @@ def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
     return np.ascontiguousarray(padded_img, dtype=np.float32), r
 
 
-def np_to_pcd2(
-    XYZ: np.ndarray,
-) -> PointCloud2:
-    header = rospy.Header(
-        frame_id="zed2i_left_camera_optical_frame", stamp=rospy.Time.now()
-    )
+def np_to_pcd2(XYZ: np.ndarray, frame: str) -> PointCloud2:
+    header = rospy.Header(frame_id=frame, stamp=rospy.Time.now())
     fields = [
         PointField("x", 0, PointField.FLOAT32, 1),
         PointField("y", 4, PointField.FLOAT32, 1),
@@ -74,7 +71,7 @@ def get_detections(raw_dets: list, rescale_ratio: float):
     Get filtered detections in scaling of original rgb and depth image
     """
     # filter uncertain bad detections
-    raw_dets = raw_dets[raw_dets[:, 4] >= 0.95]
+    raw_dets = raw_dets[raw_dets[:, 4] >= 0.9]
 
     # rescale bbox and kpts w.r.t original image
     raw_dets[:, :4] /= rescale_ratio
@@ -83,55 +80,6 @@ def get_detections(raw_dets: list, rescale_ratio: float):
 
     # kpts in format "kpC", "kpL", "kpL", "ax1", "ax2" and each kpt gets (x, y, conf)
     return raw_dets[:, :4], raw_dets[:, 4], raw_dets[:, 6:]
-
-
-# def point_markers(XYZ, frame_id="zed2i_left_camera_optical_frame"):
-#     marker_array = MarkerArray()
-#     for i, point in enumerate(XYZ):
-#         marker = Marker()
-#         marker.header.frame_id = frame_id
-#         marker.type = Marker.SPHERE
-#         marker.id = i * 2
-#         marker.pose.position.x = point[0]
-#         marker.pose.position.y = point[1]
-#         marker.pose.position.z = point[2]
-#         marker.scale.x = 0.2
-#         marker.scale.y = 0.2
-#         marker.scale.z = 0.2
-#         marker.color.a = 1.0
-#         marker.color.r = 0.0
-#         marker.color.g = 0.0
-#         marker.color.b = 1.0
-#         # quat = tf.transformations.quaternion_from_euler(0, 0, 1)
-#         # marker.pose.orientation = Quaternion(*quat)
-#         marker_array.markers.append(marker)
-#     return marker_array
-
-
-def np_to_markers(XYZ, dims, frame_id):
-    marker_array = MarkerArray()
-
-    for i, (point, dim) in enumerate(zip(XYZ, dims)):
-        m = Marker()
-        m.header.frame_id = frame_id
-        m.type = Marker.CYLINDER
-        m.action = Marker.ADD
-        m.id = i * 2
-        m.scale.x = dim[0]
-        m.scale.y = dim[1]
-        m.scale.z = dim[2]
-        m.pose.position.x = point[0]
-        m.pose.position.y = point[1]
-        m.pose.position.z = point[2]
-        m.color.a = 1.0
-        m.color.r = 1.0
-        m.color.g = 0.0
-        m.color.b = 0.0
-        quat = tf.transformations.quaternion_from_euler(0, 0, 0)
-        m.pose.orientation = Quaternion(*quat)
-
-        marker_array.markers.append(m)
-    return marker_array
 
 
 def pc2_to_np(pcl: PointCloud2):
@@ -163,7 +111,7 @@ class PointCloudTransformer:
             return None
 
 
-class CameraSubscriber:
+class TreeDetector:
     def __init__(self):
         package_path = rospkg.RosPack().get_path("treedet_ros")
         model_path = os.path.join(package_path, "model.onnx")
@@ -172,8 +120,15 @@ class CameraSubscriber:
 
         self.data_buffer = ([], [])  # RGB, Depth
 
-        # lock prevents simulataneous R/W to the buffer
-        self.lock = threading.Lock()
+        self.tree_index = {}
+        self.frame_count = 0
+        self.max_age = 2
+
+        self.tree_tracker = Sort(
+            max_age=self.max_age,
+        )
+
+        self.lock = threading.Lock()  # lock prevents simulataneous R/W to the buffer
 
         self.rgb_subscriber = rospy.Subscriber(
             "/zed2i/zed_node/rgb/image_rect_color/compressed",
@@ -181,7 +136,7 @@ class CameraSubscriber:
             self.rgb_callback,
         )
 
-        # TODO: should set to self_filtered topic once fixed
+        # TODO: should set to self_filtered topic once available from RSL
         self.lidar_subscriber = rospy.Subscriber(
             "/hesai/pandar",
             PointCloud2,
@@ -193,15 +148,15 @@ class CameraSubscriber:
         # Timer to process messages at a desired frequency (e.g., 1 Hz)
         self.timer = rospy.Timer(rospy.Duration(1 / RATE_LIMIT), self.timer_callback)
 
-    def rgb_callback(self, comp_image: CompressedImage):
+    def rgb_callback(self, comp_image: CompressedImage) -> None:
         with self.lock:
             self.data_buffer[0].append(comp_image)
 
-    def lidar_callback(self, img: Image):
+    def lidar_callback(self, pcd: PointCloud2) -> None:
         with self.lock:
-            self.data_buffer[1].append(img)
+            self.data_buffer[1].append(pcd)
 
-    def timer_callback(self, event):
+    def timer_callback(self, event) -> None:
         with self.lock:
             if self.data_buffer[0] and self.data_buffer[1]:
                 # Process the last message received
@@ -221,6 +176,49 @@ class CameraSubscriber:
 
                 self.data_buffer = ([], [])
 
+    def update_tree_index(
+        self, cut_xyzs: np.ndarray, cut_boxes: np.ndarray, tracking_ids: list
+    ) -> None:
+        """Update the tree index with new cutting data"""
+        assert cut_xyzs.shape[0] == cut_boxes.shape[0]
+
+        # remove old trees
+        to_del = []
+        self.frame_count += 1
+        for tracking_id, data in self.tree_index.items():
+            if self.frame_count - self.tree_index[tracking_id][-1][6] > RATE_LIMIT:
+                to_del.append(tracking_id)
+
+        for tracking_id in to_del:
+            del self.tree_index[tracking_id]
+
+        # add the new trees
+        if cut_xyzs.shape[0] > 0:
+            # remember the time that we found the tree
+            frame_tag = np.full((cut_xyzs.shape[0], 1), self.frame_count)
+            new_tree_data = np.hstack((cut_xyzs, cut_boxes, frame_tag))
+
+            for new_d, tracking_id in zip(new_tree_data, tracking_ids):
+                if tracking_id in self.tree_index:
+                    self.tree_index[tracking_id].append(new_d)
+                else:
+                    self.tree_index[tracking_id] = [new_d]
+
+    def fetch_tree_data(self):
+        """Read the tree index and prepare an average of values"""
+        # ret_tracking_ids = []
+        ret_tree_data = []
+
+        for t_id, tree_data in self.tree_index.items():
+            # compute the mean of existing values
+            tree_data = np.vstack(tree_data)
+            ret_tree_data.append(np.mean(tree_data, axis=0))
+            # ret_tracking_ids.append(t_id)
+
+        if len(ret_tree_data) > 0:
+            return np.vstack(ret_tree_data)  # , ret_tracking_ids
+        return np.empty((0, 7))  # , []
+
     def process(self, rgb_img: np.ndarray, pcl: np.ndarray):
         # pass image through model
         start = time.perf_counter()
@@ -231,21 +229,55 @@ class CameraSubscriber:
         bboxes, confs, kpts = get_detections(output[0], ratio)
         print(f"get_detections:  \t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
-        start = time.perf_counter()
-        cut_xyz, cut_diam = get_cutting_data(bboxes, kpts, pcl)
-        print(f"get_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
+        # pass the detections through object tracker across frames. Tells us which trees are visible.
+        # trackers: [:, bbox x1 y1 x2 y2, tracking_id]
+        trackers, det_to_id_map = self.tree_tracker.update(dets=bboxes)
 
-        out_pcd = np_to_pcd2(cut_xyz)
-        out_pcd = self.pcl_transformer.tf(
-            out_pcd, "zed2i_left_camera_optical_frame", "BASE"
+        # ensure kpts in same order as the tracked bboxes
+        tracked_kpts = np.zeros((trackers.shape[0], kpts.shape[1]))
+        for t_kpts, tracker in zip(tracked_kpts, trackers):
+            tracking_id = tracker[4]
+            det_id = det_to_id_map[tracking_id]
+            t_kpts[:] = kpts[det_id, :]
+
+        # extract cutting info from the tracked trees
+        start = time.perf_counter()
+        cut_xyzs, cut_boxes, tracking_ids = get_cutting_data(
+            trackers[:, :4], tracked_kpts, trackers[:, 4], pcl, fit_cylinder=False
         )
-        marker_pub.publish(np_to_markers(pc2_to_np(out_pcd), cut_diam, "BASE"))
-        print()
+
+        assert cut_xyzs.shape[0] == cut_boxes.shape[0] and cut_boxes.shape[0] == len(
+            tracking_ids
+        )
+
+        map_cut_pcd = self.pcl_transformer.tf(
+            np_to_pcd2(cut_xyzs, "zed2i_left_camera_optical_frame"),
+            "zed2i_left_camera_optical_frame",
+            "map",
+        )
+
+        self.update_tree_index(
+            cut_xyzs=pc2_to_np(map_cut_pcd),
+            cut_boxes=cut_boxes,
+            tracking_ids=tracking_ids,
+        )
+
+        map_tree_data = self.fetch_tree_data()
+
+        print(
+            f"extract_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms"
+        )
+
+        # transform the cutting point coordinates in map frame
+        # detection_pub.publish(np_to_pcd2(XYZ=map_tree_data[:, :3], frame="map"))
+        marker_pub.publish(
+            np_to_markers(map_tree_data[:, :3], map_tree_data[:, 3:6], "map")
+        )
 
 
 def main():
     rospy.init_node("treedet_inference", anonymous=True)
     rospy.set_param("/use_sim_time", True)
 
-    CameraSubscriber()
+    TreeDetector()
     rospy.spin()

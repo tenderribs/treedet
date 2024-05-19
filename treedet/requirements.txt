@@ -13,3 +13,5 @@ seaborn
 wandb
 onnx
 onnxruntime
+filterpy
+lap
