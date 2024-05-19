@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+import rospy
+import pandas as pd
+
+from interactive_markers.interactive_marker_server import (
+    InteractiveMarkerServer,
+    InteractiveMarkerFeedback,
+)
+from visualization_msgs.msg import InteractiveMarker, InteractiveMarkerControl, Marker
+
+from jsk_recognition_msgs.msg import BoundingBoxArray
+
+
+selected_trees = {}
+
+
+def toggle_selection(feedback):
+    if feedback.event_type == InteractiveMarkerFeedback.BUTTON_CLICK:
+        int_marker = server.get(feedback.marker_name)
+
+        if int_marker and int_marker.controls:
+            control = int_marker.controls[0]
+            marker = control.markers[0]
+
+            # toggle red and green color
+            marker.color.r = 1.0 if marker.color.r == 0.0 else 0
+            marker.color.g = 1.0 if marker.color.g == 0.0 else 0
+            marker.color.b = 0.0
+            marker.color.a = 1.0 if marker.color.a == 0.5 else 0.5
+
+            # Re-insert the updated marker into the server
+            server.insert(int_marker, toggle_selection)
+            server.applyChanges()
+
+            # toggle selection state
+            selection_state = selected_trees[feedback.marker_name]["selected"]
+            selected_trees[feedback.marker_name]["selected"] = not selection_state
+
+
+def create_bounding_box_marker(bbox, index):
+    int_marker = InteractiveMarker()
+    int_marker.header = bbox.header
+    int_marker.name = "bbox_" + str(index)
+    int_marker.description = "Bounding Box " + str(index)
+    int_marker.pose = bbox.pose
+
+    box_marker = Marker()
+    box_marker.type = Marker.CUBE
+    box_marker.scale = bbox.dimensions
+    box_marker.color.r = 0.0
+    box_marker.color.g = 1.0
+    box_marker.color.b = 0.0
+    box_marker.color.a = 0.5
+
+    control = InteractiveMarkerControl()
+    control.interaction_mode = InteractiveMarkerControl.BUTTON
+    control.always_visible = True
+    control.markers.append(box_marker)
+    int_marker.controls.append(control)
+
+    selected_trees[int_marker.name] = {
+        "position_x": bbox.pose.position.x,
+        "position_y": bbox.pose.position.y,
+        "position_z": bbox.pose.position.z,
+        "dim_x": bbox.dimensions.x,
+        "dim_y": bbox.dimensions.y,
+        "dim_z": bbox.dimensions.z,
+        "frame_id": bbox.header.frame_id,
+        "selected": False,
+    }
+
+    return int_marker
+
+
+def bounding_box_callback(msg):
+    for i, bbox in enumerate(msg.boxes):
+        i_marker: InteractiveMarker = create_bounding_box_marker(bbox, i)
+        server.insert(i_marker, toggle_selection)
+
+    server.applyChanges()
+
+
+def shutdown_hook():
+    print(f"\nSaving {len(selected_trees)} trees")
+    df = pd.DataFrame.from_dict(selected_trees, orient="index")
+    df.to_csv("trees_found.csv")
+    print("Saving complete.")
+
+
+if __name__ == "__main__":
+    rospy.init_node("interactive_bounding_boxes")
+    server = InteractiveMarkerServer("bounding_box_markers")
+
+    rospy.Subscriber(
+        "/tree_detection_node/tree_bbs", BoundingBoxArray, bounding_box_callback
+    )
+    rospy.on_shutdown(shutdown_hook)
+    rospy.spin()
