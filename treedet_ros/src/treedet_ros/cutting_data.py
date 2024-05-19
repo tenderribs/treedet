@@ -20,7 +20,7 @@ cx = P[0, 2]
 cy = P[1, 2]
 
 # depth limits of the frustum
-Z_MIN = 0.1
+Z_MIN = 1
 Z_MAX = 20
 
 
@@ -93,13 +93,15 @@ def estimate_3d_tree_data(kpts: np.ndarray, pcl: np.ndarray):
     w_ax2 = ray_vec(kpts[12:14])
 
     # calculate the width of the tree as average of 3D eucl. dist from cut kpt to left and right kpts resp.
-    rad_left = np.sqrt(np.sum((estimate_3d(pcl, w_l) - estimate_3d(pcl, w_fc)) ** 2))
-    rad_right = np.sqrt(np.sum((estimate_3d(pcl, w_r) - estimate_3d(pcl, w_fc)) ** 2))
-    radius = (rad_left + rad_right) / 2
+    # rad_left = np.sqrt(np.sum((estimate_3d(pcl, w_l) - estimate_3d(pcl, w_fc)) ** 2))
+    # rad_right = np.sqrt(np.sum((estimate_3d(pcl, w_r) - estimate_3d(pcl, w_fc)) ** 2))
+    # radius = (rad_left + rad_right) / 2
 
     # calculate height limited to x meters
-    height = np.sqrt(np.sum((estimate_3d(pcl, w_fc) - estimate_3d(pcl, w_ax2)) ** 2))
-    height = min(height, 2.0)
+    # height = np.sqrt(np.sum((estimate_3d(pcl, w_fc) - estimate_3d(pcl, w_ax2)) ** 2))
+    # height = min(height, 2.0)
+    radius = 0.2
+    height = 2
 
     fc3d = estimate_3d(pcl, w_fc)
     return (
