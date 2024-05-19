@@ -7,9 +7,9 @@
 	<include file="$(find harveri_description)/launch/load.launch" />
 
 	<!-- run self-filtering on lidar pcl -->
-	<!-- doesn't really work atm. -->
+	<!-- doesn't really work atm. because the boom doesn't get filtered -->
 	<include file="$(find harveri_mapping)/launch/harveri_self_see_filter.launch" />
 
-	<!-- <node pkg="treedet_ros" name="treedet_ros" type="inference.py" output="screen" /> -->
-	<!-- <node if="$(arg gui)" name="rviz_tree_detection" pkg="rviz" type="rviz" args="-d $(arg rviz_config_file)" required="true"/> -->
+	<node pkg="treedet_ros" name="treedet_ros" type="main" output="screen" />
+	<node if="$(arg gui)" name="rviz_tree_detection" pkg="rviz" type="rviz" args="-d $(arg rviz_config_file)" required="true"/>
 </launch>
