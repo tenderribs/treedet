@@ -8,17 +8,8 @@
 
 	<!-- run self-filtering on lidar pcl -->
 	<!-- doesn't really work atm. -->
-	<!-- <include file="$(find harveri_mapping)/launch/harveri_self_see_filter.launch" /> -->
+	<include file="$(find harveri_mapping)/launch/harveri_self_see_filter.launch" />
 
-	<!-- Launch visualization -->
-	<include file="$(find harveri_rviz)/launch/tf_publisher.launch" />
-
-	<!-- Launch tree_detection node -->
 	<!-- <node pkg="treedet_ros" name="treedet_ros" type="inference.py" output="screen" /> -->
-	<node if="$(arg gui)" name="rviz_tree_detection" pkg="rviz" type="rviz" args="-d $(arg rviz_config_file)" required="true"/>
-
-	<!-- Use estimators-->
-	<!-- harveri_estimator finicky with message MD5 hash, changed in finland ds -->
-	<include file="$(find asop_se)/launch/compslam_lio.launch" />
-	<!-- <include file="$(find harveri_estimator)/launch/harveri_estimator.launch"/> -->
+	<!-- <node if="$(arg gui)" name="rviz_tree_detection" pkg="rviz" type="rviz" args="-d $(arg rviz_config_file)" required="true"/> -->
 </launch>
