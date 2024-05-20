@@ -277,7 +277,6 @@ class TreeDetector:
 
 def main():
     rospy.init_node("treedet_inference", anonymous=True)
-    rospy.set_param("/use_sim_time", True)
 
     TreeDetector()
     rospy.spin()
