@@ -29,7 +29,7 @@ def constr_msgs(df: pd.DataFrame) -> HarveriDetectedTrees:
 
 
 def main():
-    pub = rospy.Publisher("/tree_det/tree_targets", HarveriDetectedTrees, queue_size=10)
+    pub = rospy.Publisher("/treedet/tree_targets", HarveriDetectedTrees, queue_size=10)
     rospy.init_node("treedet_target_publisher")
     r = rospy.Rate(FREQ_HZ)
 

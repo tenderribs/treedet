@@ -28,9 +28,9 @@ FIT_CYLINDER: bool = True
 
 br = CvBridge()
 
-felling_cut_pub = rospy.Publisher("/tree_det/felling_cut", PointCloud2, queue_size=10)
+felling_cut_pub = rospy.Publisher("/treedet/felling_cut", PointCloud2, queue_size=10)
 detection_pub = rospy.Publisher(
-    "/tree_det/detected_trees", HarveriDetectedTrees, queue_size=10
+    "/treedet/detected_trees", HarveriDetectedTrees, queue_size=10
 )
 
 
