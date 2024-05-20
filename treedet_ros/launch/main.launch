@@ -11,9 +11,9 @@
 
 	<!-- run self-filtering on lidar pcl -->
 	<!-- doesn't really work atm. because the boom doesn't get filtered -->
-	<include file="$(find harveri_mapping)/launch/harveri_self_see_filter.launch" />
+	<include file="$(find harveri_mapping)/launch/harveri_self_see_filter.launch"/>
 
-	<node pkg="treedet_ros" name="treedet_ros" type="publish_targets" output="screen" />
-	<node pkg="treedet_ros" name="treedet_ros" type="main" output="screen" />
+	<node pkg="treedet_ros" name="publish_targets" type="publish_targets" output="screen" />
+	<node pkg="treedet_ros" name="main" type="main" output="screen" />
 	<node if="$(arg gui)" name="rviz_tree_detection" pkg="rviz" type="rviz" args="-d $(arg rviz_config_file)" required="true"/>
 </launch>
