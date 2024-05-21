@@ -31,11 +31,29 @@ rosservice call /mapping_node/save_map
 First fire up the tree_detection module that extracts the bboxes from the global pointcloud. For some reason the default ground removal strategy doesn't work, so just cropbox instead.
 
 ```bash
-roslaunch tree_detection_ros tree_detection.launch ground_removal_strategy:=cropbox launch_rviz:=False pcd_filepath:=/datasets/maps/map.pcd
+roslaunch tree_detection_ros tree_detection.launch ground_removal_strategy:=cropbox launch_rviz:=False pcd_filepath:=/datasets/maps/map_small.pcd
 ```
 
 With the above launch file still running, go ahead and run the command below. You can toggle the selction of a tree by clicking on its bounding box. When you kill the launch process, it saves the selected trees as a csv file.
 
 ```bash
 roslaunch treedet_ros select_targets.launch
+```
+
+### Evaluate target acquisition
+
+```bash
+# save detections from treedet_ros inference script
+roslaunch treedet_ros main.launch gui:=False
+```
+
+```bash
+# publish registered map
+rosrun pcl_ros pcd_to_pointcloud /datasets/maps/map_small.pcd 1 _frame_id:=map_o3d
+
+# publish static transform between map and map_o3d
+rosrun tf static_transform_publisher -1 -5.3 0 0.43 0 0 map map_o3d 10
+
+# view the detected trees -> perform sanity check
+
 ```

@@ -70,16 +70,16 @@ def np_to_pcd2(XYZ: np.ndarray, frame: str) -> PointCloud2:
 
 
 def np_to_hvri_det_trees(
-    xyz: np.ndarray, dims: np.ndarray, frame: str = "map"
+    xyz: np.ndarray, dims: np.ndarray, tracking_ids, frame: str = "map"
 ) -> HarveriDetectedTrees:
     assert xyz.shape[1] == 3 and dims.shape[1] == 3
 
     tree_list = HarveriDetectedTrees()
     tree_list.header.frame_id = frame
 
-    for i, (_xyz, _dims) in enumerate(zip(xyz, dims)):
+    for i, (_xyz, _dims, _t_id) in enumerate(zip(xyz, dims, tracking_ids)):
         msg = HarveriDetectedTree()
-        msg.id = i
+        msg.id = int(_t_id)
 
         msg.x = _xyz[0]
         msg.y = _xyz[1]
@@ -320,7 +320,7 @@ class TreeDetector:
             tracking_ids=tracking_ids,
         )
 
-        tree_cutting_data, _ = self.fetch_tree_data()
+        tree_cutting_data, tracking_ids = self.fetch_tree_data()
 
         print(
             f"extract_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms"
@@ -330,7 +330,10 @@ class TreeDetector:
         felling_cut_pub.publish(np_to_pcd2(XYZ=tree_cutting_data[:, :3], frame="map"))
         detection_pub.publish(
             np_to_hvri_det_trees(
-                tree_cutting_data[:, :3], tree_cutting_data[:, 3:6], frame="map"
+                tree_cutting_data[:, :3],
+                tree_cutting_data[:, 3:6],
+                tracking_ids,
+                frame="map",
             )
         )
 

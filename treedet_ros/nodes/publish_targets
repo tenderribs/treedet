@@ -34,7 +34,7 @@ def main():
     r = rospy.Rate(FREQ_HZ)
 
     package_path = rospkg.RosPack().get_path("treedet_ros")
-    csv_path = os.path.join(package_path, "scripts", "trees_found.csv")
+    csv_path = os.path.join(package_path, "scripts", "tree_targets.csv")
 
     if not os.path.isfile(csv_path):
         rospy.logerror(f"tree targets CSV file not found at {csv_path}")
