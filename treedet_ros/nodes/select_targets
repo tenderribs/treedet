@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 import rospy
+import rospkg
 import pandas as pd
+import os
 
 from interactive_markers.interactive_marker_server import (
     InteractiveMarkerServer,
@@ -40,7 +42,7 @@ def toggle_selection(feedback):
 def create_bounding_box_marker(bbox, index):
     int_marker = InteractiveMarker()
     int_marker.header = bbox.header
-    int_marker.name = "bbox_" + str(index)
+    int_marker.name = str(index)
     int_marker.description = "Bounding Box " + str(index)
     int_marker.pose = bbox.pose
 
@@ -59,13 +61,13 @@ def create_bounding_box_marker(bbox, index):
     int_marker.controls.append(control)
 
     selected_trees[int_marker.name] = {
-        "position_x": bbox.pose.position.x,
-        "position_y": bbox.pose.position.y,
-        "position_z": bbox.pose.position.z,
+        "pos_x": bbox.pose.position.x,
+        "pos_y": bbox.pose.position.y,
+        "pos_z": bbox.pose.position.z - bbox.dimensions.z / 2,
         "dim_x": bbox.dimensions.x,
         "dim_y": bbox.dimensions.y,
         "dim_z": bbox.dimensions.z,
-        "frame_id": bbox.header.frame_id,
+        "frame_id": "map_o3d",
         "selected": False,
     }
 
@@ -83,7 +85,11 @@ def bounding_box_callback(msg):
 def shutdown_hook():
     print(f"\nSaving {len(selected_trees)} trees")
     df = pd.DataFrame.from_dict(selected_trees, orient="index")
-    df.to_csv("trees_found.csv")
+
+    package_path = rospkg.RosPack().get_path("treedet_ros")
+    csv_path = os.path.join(package_path, "scripts", "tree_targets.csv")
+
+    df.to_csv(csv_path)
     print("Saving complete.")
 
 
