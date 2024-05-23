@@ -26,13 +26,6 @@ TRACKER_MAX_AGE: int = 1
 DET_RETENTION_S: int = 1
 FIT_CYLINDER: bool = True
 
-br = CvBridge()
-
-felling_cut_pub = rospy.Publisher("/treedet/felling_cut", PointCloud2, queue_size=10)
-detection_pub = rospy.Publisher(
-    "/treedet/detected_trees", HarveriDetectedTrees, queue_size=10
-)
-
 
 def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
     assert len(img.shape) == 3
@@ -138,6 +131,15 @@ class PointCloudTransformer:
 
 class TreeDetector:
     def __init__(self):
+        br = CvBridge()
+
+        self.felling_cut_pub = rospy.Publisher(
+            "/treedet/felling_cut", PointCloud2, queue_size=10
+        )
+        self.detection_pub = rospy.Publisher(
+            "/treedet/detected_trees", HarveriDetectedTrees, queue_size=10
+        )
+
         package_path = rospkg.RosPack().get_path("treedet_ros")
         model_path = os.path.join(package_path, "model.onnx")
         self.session = onnxruntime.InferenceSession(model_path)
@@ -186,7 +188,7 @@ class TreeDetector:
             if self.data_buffer[0] and self.data_buffer[1]:
                 # Process the last message received
                 rgb_msg: CompressedImage = self.data_buffer[0][-1]
-                rgb_img: np.ndarray = br.compressed_imgmsg_to_cv2(rgb_msg)
+                rgb_img: np.ndarray = self.br.compressed_imgmsg_to_cv2(rgb_msg)
                 rgb_img = rgb_img[:, :, :3]  # cut out the alpha channel (bgra8 -> bgr8)
 
                 lidar_pcl: PointCloud2 = self.data_buffer[1][-1]
@@ -327,8 +329,10 @@ class TreeDetector:
         )
 
         # transform the cutting point coordinates in map frame
-        felling_cut_pub.publish(np_to_pcd2(XYZ=tree_cutting_data[:, :3], frame="map"))
-        detection_pub.publish(
+        self.felling_cut_pub.publish(
+            np_to_pcd2(XYZ=tree_cutting_data[:, :3], frame="map")
+        )
+        self.detection_pub.publish(
             np_to_hvri_det_trees(
                 tree_cutting_data[:, :3],
                 tree_cutting_data[:, 3:6],

@@ -400,3 +400,28 @@ def set_axes_equal(ax):
     ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+
+def apply_hom_tf(xyz, src: str, dest: str):
+    assert xyz.shape[0] and xyz.shape[1] == 3
+
+    T = np.array(
+        [
+            [8.99265226e-01, -4.37336201e-01, 7.68766682e-03, -8.61728469e-01],
+            [4.37391503e-01, 8.99232715e-01, -8.31845589e-03, -4.94360570e00],
+            [-3.27503961e-03, 1.08430183e-02, 9.99935849e-01, 1.56276816e-01],
+            [0.00000000e00, 0.00000000e00, 0.00000000e00, 1.00000000e00],
+        ]
+    )
+
+    # transform map_o3d to map
+    if src == "map_o3d" and dest == "map":
+        pass
+    elif src == "map" and dest == "map_o3d":
+        T = np.linalg.inv(T)
+    else:
+        assert False, "unsupported combo of src and dest"
+
+    xyz = np.hstack((xyz, np.ones((xyz.shape[0], 1))))
+    xyz = (T @ xyz.T).T
+    return xyz[:, :3]

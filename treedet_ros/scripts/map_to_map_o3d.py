@@ -9,29 +9,7 @@ from sensor_msgs.msg import PointCloud2
 import tf2_sensor_msgs
 
 from treedet_ros.icp import icp
-
-
-class PointCloudTransformer:
-    def __init__(self):
-        # Initialize the tf2 buffer and listener once
-        self.tf_buffer = tf2_ros.Buffer()
-        self.listener = tf2_ros.TransformListener(self.tf_buffer)
-
-    def tf(self, cloud_in: PointCloud2, from_frame: str, to_frame: str) -> PointCloud2:
-        # Wait for the transform to be available
-        try:
-            transform = self.tf_buffer.lookup_transform(
-                to_frame, from_frame, rospy.Time(0), rospy.Duration(1.0)
-            )
-
-            return tf2_sensor_msgs.do_transform_cloud(cloud_in, transform)
-        except (
-            tf2_ros.LookupException,
-            tf2_ros.ConnectivityException,
-            tf2_ros.ExtrapolationException,
-        ) as e:
-            rospy.logerr("Error transforming point cloud: %s" % str(e))
-            return None
+from treedet_ros.inference import PointCloudTransformer
 
 
 class PointCloudExtractor:
@@ -98,13 +76,27 @@ def plot(xyz_map, xyz_map_o3d):
         ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
         ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
+    from treedet_ros.pcl import apply_hom_tf
+
+    view_frustums = apply_hom_tf(
+        np.load("view_frustums.npy"), src="map_o3d", dest="map"
+    )
+
+    print("plotting")
+
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
 
-    ax.scatter(xyz_map[:, 0], xyz_map[:, 1], xyz_map[:, 2], label="xyz_map")
+    # ax.scatter(xyz_map[:, 0], xyz_map[:, 1], xyz_map[:, 2], label="xyz_map")
+    ax.scatter(
+        view_frustums[:, 0],
+        view_frustums[:, 1],
+        view_frustums[:, 2],
+        label="view_frustums",
+    )
     ax.scatter(
         xyz_map_o3d[:, 0], xyz_map_o3d[:, 1], xyz_map_o3d[:, 2], label="xyz_map_o3d"
     )
@@ -139,6 +131,7 @@ def subsample(xyz: np.ndarray, factor: float = 0.1):
 if __name__ == "__main__":
     # fetch the first lidar scans of rosbag, within the map frame
     if not os.path.isfile("xyz_map.npy"):
+        print("play back rosbag to extract some pointclouds")
         pce = PointCloudExtractor()
         while not pce.ready:
             time.sleep(0.1)
