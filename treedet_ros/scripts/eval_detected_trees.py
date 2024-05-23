@@ -67,10 +67,14 @@ def do_eval(dets: np.ndarray, targets: np.ndarray):
     targets = targets[["pos_x", "pos_y", "pos_z"]].to_numpy()
 
     # transform map_o3d to map
-    T = np.ones((4, 4))
-    T[:3, :3] = rpy_2_rot_matrix(0.43)
-    T[:3, 3] = [-1, -5.3, 0]
-
+    T = np.array(
+        [
+            [8.99265226e-01, -4.37336201e-01, 7.68766682e-03, -8.61728469e-01],
+            [4.37391503e-01, 8.99232715e-01, -8.31845589e-03, -4.94360570e00],
+            [-3.27503961e-03, 1.08430183e-02, 9.99935849e-01, 1.56276816e-01],
+            [0.00000000e00, 0.00000000e00, 0.00000000e00, 1.00000000e00],
+        ]
+    )
     #
     targets = np.hstack((targets, np.ones((targets.shape[0], 1))))
     targets = (T @ targets.T).T
@@ -89,11 +93,11 @@ def do_eval(dets: np.ndarray, targets: np.ndarray):
     plt.scatter(targets[:, 1], targets[:, 0], c="r", label="Targets")
 
     for i, (dist, targ) in enumerate(zip(min_distances, targets)):
-        plt.text(targ[1], targ[0] - 1, f"{round(dist, 3)}", fontsize=12, ha="right")
+        plt.text(targ[1], targ[0] - 2, f"{round(dist, 2)}m", fontsize=12, ha="center")
 
-    plt.xlabel("X Position")
-    plt.ylabel("Y Position")
-    plt.title("Transformed Detections and Targets")
+    plt.xlabel("Y [m]")
+    plt.ylabel("X [m]")
+    plt.title("Distance between tree target and closest detection")
     plt.gca().set_aspect("equal", adjustable="box")  # Set equal aspect ratio
 
     plt.legend()
@@ -109,6 +113,7 @@ def main():
 
     # have to apply a static transformation before we do anything.
     do_eval(dets, targets)
+    return
 
     pub1 = rospy.Publisher("/treedet_ros/viz_dets", MarkerArray, queue_size=10)
     pub2 = rospy.Publisher("/treedet_ros/viz_targs", MarkerArray, queue_size=10)
