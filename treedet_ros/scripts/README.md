@@ -57,3 +57,5 @@ rosrun tf static_transform_publisher -1 -5.3 0 0.43 0 0 map map_o3d 10
 # view the detected trees -> perform sanity check
 
 ```
+
+
