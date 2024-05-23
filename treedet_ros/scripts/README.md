@@ -47,15 +47,15 @@ roslaunch treedet_ros select_targets.launch
 roslaunch treedet_ros main.launch gui:=False
 ```
 
+## `map_to_map_o3d.py`
+
+The `open3d_slam_ros` mapping software produces a map in the map_o3d frame. The map_o3d and range_sensor_o3d (a.k.a. PandarQT of the lidar) origins coincide. This should probably be the same case for the compslam package that was used to create the rosbags. Yet for some reason there is a translation and some yaw between the two produced maps. Whatever. You can calculate the homogenous transformation matrix with the following script.
+
+With the ICP output you can update the transformation matrix in `eval_detected_trees.py`.
+
 ```bash
-# publish registered map
-rosrun pcl_ros pcd_to_pointcloud /datasets/maps/map_small.pcd 1 _frame_id:=map_o3d
+rosbag play <whatever rosbag was used to generate map with o3d>
 
-# publish static transform between map and map_o3d
-rosrun tf static_transform_publisher -1 -5.3 0 0.43 0 0 map map_o3d 10
-
-# view the detected trees -> perform sanity check
-
+# make sure to update the path to the map_pcd file. this file listens to rosbag for the first five /tf and /hesai/pandar messages
+python3 map_to_map_o3d.py
 ```
-
-

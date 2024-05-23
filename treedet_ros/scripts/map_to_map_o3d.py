@@ -150,9 +150,9 @@ if __name__ == "__main__":
     pcd_map_o3d = o3d.io.read_point_cloud("/datasets/maps/map_small.pcd")
     xyz_map_o3d = np.asarray(pcd_map_o3d.points)
 
-    # remember the original values
-    xyz_map_og = subsample(xyz_map, 0.1)
-    xyz_map_o3d_og = subsample(xyz_map_o3d, 0.01)
+    # # remember the original values
+    # xyz_map_og = subsample(xyz_map, 0.1)
+    # xyz_map_o3d_og = subsample(xyz_map_o3d, 0.01)
 
     # crop height
     xyz_map, xyz_map_o3d = crop_z(xyz_map), crop_z(xyz_map_o3d)
@@ -176,9 +176,10 @@ if __name__ == "__main__":
 
     # get tf from map_o3d to map
     T, _, iters = icp(xyz_map_o3d, xyz_map, init_pose=T_init)
+    print(f"ran ICP in {iters} iters")
 
     print(f"init guess:\n{T_init}")
     print(f"final matrx:\n{T}")
 
-    xyz_map_o3d_og = apply_hom_matrix(T, xyz_map_o3d_og)
-    plot(xyz_map_og, xyz_map_o3d_og)
+    xyz_map_o3d = apply_hom_matrix(T, xyz_map_o3d)
+    plot(xyz_map, xyz_map_o3d)

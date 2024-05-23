@@ -105,7 +105,6 @@ def do_eval(dets: np.ndarray, targets: np.ndarray):
 
 
 def main():
-    rospy.init_node("view_detected_trees")
 
     dets = pd.read_csv("tree_detections.csv")
     targets = pd.read_csv("tree_targets.csv")
@@ -113,7 +112,9 @@ def main():
 
     # have to apply a static transformation before we do anything.
     do_eval(dets, targets)
+
     return
+    rospy.init_node("view_detected_trees")
 
     pub1 = rospy.Publisher("/treedet_ros/viz_dets", MarkerArray, queue_size=10)
     pub2 = rospy.Publisher("/treedet_ros/viz_targs", MarkerArray, queue_size=10)
