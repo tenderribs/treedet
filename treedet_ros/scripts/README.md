@@ -31,7 +31,7 @@ rosservice call /mapping_node/save_map
 First fire up the tree_detection module that extracts the bboxes from the global pointcloud. For some reason the default ground removal strategy doesn't work, so just cropbox instead.
 
 ```bash
-roslaunch tree_detection_ros tree_detection.launch ground_removal_strategy:=cropbox launch_rviz:=False pcd_filepath:=/datasets/maps/map_small.pcd
+roslaunch tree_detection_ros tree_detection.launch ground_removal_strategy:=cropbox launch_rviz:=False pcd_filepath:=<PCD FILEPATH>
 ```
 
 With the above launch file still running, go ahead and run the command below. You can toggle the selction of a tree by clicking on its bounding box. When you kill the launch process, it saves the selected trees as a csv file.
@@ -49,9 +49,9 @@ roslaunch treedet_ros main.launch gui:=False
 
 ## `map_to_map_o3d.py`
 
-The `open3d_slam_ros` mapping software produces a map in the map_o3d frame. The map_o3d and range_sensor_o3d (a.k.a. PandarQT of the lidar) origins coincide. This should probably be the same case for the compslam package that was used to create the rosbags. Yet for some reason there is a translation and some yaw between the two produced maps. Whatever. You can calculate the homogenous transformation matrix with the following script.
+The `open3d_slam_ros` mapping software produces a map in the map_o3d frame. The map_o3d and range_sensor_o3d (a.k.a. PandarQT of the lidar) origins coincide. This should probably be the same case for the compslam package that was used to create the rosbags. Yet for some reason there is a translation and some yaw between the two produced maps. This script calculates the static transformation between the two coordinate frames.
 
-With the ICP output you can update the transformation matrix in `eval_detected_trees.py`.
+With the ICP output you can update the transformation matrix in `pcl.py`.
 
 ```bash
 rosbag play <whatever rosbag was used to generate map with o3d>
