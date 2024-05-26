@@ -2,7 +2,7 @@
 <launch>
 	<arg name="gui" default="true" />
 	<arg name="rviz_config_file" default="$(find treedet_ros)/rviz/select_targets.rviz" />
-	<arg name="use_sim_time" default="true"/>
+	<arg name="use_sim_time" default="false"/>
 
 	<param name="/use_sim_time" value="$(arg use_sim_time)"/>
 

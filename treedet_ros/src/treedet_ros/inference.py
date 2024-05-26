@@ -15,20 +15,16 @@ from sensor_msgs.msg import CompressedImage
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
 
-from visualization_msgs.msg import MarkerArray
-
+from harveri_msgs.msg import HarveriDetectedTrees, HarveriDetectedTree
 from treedet_ros.cutting_data import get_cutting_data
 from treedet_ros.sort_tracker import Sort
 
-# from treedet_ros.bbox import tree_data_to_bbox
-from treedet_ros.rviz import np_to_markers
-
-RATE_LIMIT = 5.0  # process incoming images at given frequency
-
-br = CvBridge()
-
-detection_pub = rospy.Publisher("/tree_det/felling_cut", PointCloud2, queue_size=10)
-marker_pub = rospy.Publisher("/tree_det/markers", MarkerArray, queue_size=10)
+RATE_LIMIT = 5.0
+MAX_TREE_LATERAL_ERR: float = 0.4
+DETECTION_CONF_THRESH: float = 0.95
+TRACKER_MAX_AGE: int = 1
+DET_RETENTION_S: int = 1
+FIT_CYLINDER: bool = True
 
 
 def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
@@ -66,12 +62,34 @@ def np_to_pcd2(XYZ: np.ndarray, frame: str) -> PointCloud2:
     return point_cloud2.create_cloud(header, fields, points)
 
 
+def np_to_hvri_det_trees(
+    xyz: np.ndarray, dims: np.ndarray, tracking_ids, frame: str = "map"
+) -> HarveriDetectedTrees:
+    assert xyz.shape[1] == 3 and dims.shape[1] == 3
+
+    tree_list = HarveriDetectedTrees()
+    tree_list.header.frame_id = frame
+
+    for i, (_xyz, _dims, _t_id) in enumerate(zip(xyz, dims, tracking_ids)):
+        msg = HarveriDetectedTree()
+        msg.id = int(_t_id)
+
+        msg.x = _xyz[0]
+        msg.y = _xyz[1]
+        msg.z = _xyz[2]
+        msg.dim_x = _dims[0]
+        msg.dim_y = _dims[2]
+        msg.dim_z = _dims[2]
+        tree_list.trees.append(msg)
+    return tree_list
+
+
 def get_detections(raw_dets: list, rescale_ratio: float):
     """
     Get filtered detections in scaling of original rgb and depth image
     """
     # filter uncertain bad detections
-    raw_dets = raw_dets[raw_dets[:, 4] >= 0.9]
+    raw_dets = raw_dets[raw_dets[:, 4] >= DETECTION_CONF_THRESH]
 
     # rescale bbox and kpts w.r.t original image
     raw_dets[:, :4] /= rescale_ratio
@@ -113,6 +131,15 @@ class PointCloudTransformer:
 
 class TreeDetector:
     def __init__(self):
+        self.br = CvBridge()
+
+        self.felling_cut_pub = rospy.Publisher(
+            "/treedet/felling_cut", PointCloud2, queue_size=10
+        )
+        self.detection_pub = rospy.Publisher(
+            "/treedet/detected_trees", HarveriDetectedTrees, queue_size=10
+        )
+
         package_path = rospkg.RosPack().get_path("treedet_ros")
         model_path = os.path.join(package_path, "model.onnx")
         self.session = onnxruntime.InferenceSession(model_path)
@@ -122,7 +149,7 @@ class TreeDetector:
 
         self.tree_index = {}
         self.frame_count = 0
-        self.max_age = 2
+        self.max_age = TRACKER_MAX_AGE
 
         self.tree_tracker = Sort(
             max_age=self.max_age,
@@ -161,7 +188,7 @@ class TreeDetector:
             if self.data_buffer[0] and self.data_buffer[1]:
                 # Process the last message received
                 rgb_msg: CompressedImage = self.data_buffer[0][-1]
-                rgb_img: np.ndarray = br.compressed_imgmsg_to_cv2(rgb_msg)
+                rgb_img: np.ndarray = self.br.compressed_imgmsg_to_cv2(rgb_msg)
                 rgb_img = rgb_img[:, :, :3]  # cut out the alpha channel (bgra8 -> bgr8)
 
                 lidar_pcl: PointCloud2 = self.data_buffer[1][-1]
@@ -176,48 +203,77 @@ class TreeDetector:
 
                 self.data_buffer = ([], [])
 
+    def find_existing(
+        self, new_d: np.ndarray, existing_trees: np.ndarray, existing_t_ids: list
+    ):
+        if existing_trees.shape[0] == 0:
+            return None
+
+        distances = np.linalg.norm(new_d[:2] - existing_trees[:, :2], axis=1)
+        min_distance_index = np.argmin(distances)
+        if distances[min_distance_index] < MAX_TREE_LATERAL_ERR:
+            return existing_t_ids[min_distance_index]
+
+        return None
+
     def update_tree_index(
         self, cut_xyzs: np.ndarray, cut_boxes: np.ndarray, tracking_ids: list
     ) -> None:
         """Update the tree index with new cutting data"""
         assert cut_xyzs.shape[0] == cut_boxes.shape[0]
 
+        self.frame_count += 1
+
         # remove old trees
         to_del = []
-        self.frame_count += 1
         for tracking_id, data in self.tree_index.items():
-            if self.frame_count - self.tree_index[tracking_id][-1][6] > RATE_LIMIT:
+            # if the tree has not received any detections for longer than 4 seconds
+            if (
+                self.frame_count - self.tree_index[tracking_id][-1][6]
+                > DET_RETENTION_S * RATE_LIMIT
+            ):
                 to_del.append(tracking_id)
 
         for tracking_id in to_del:
             del self.tree_index[tracking_id]
 
-        # add the new trees
+        # add new trees
         if cut_xyzs.shape[0] > 0:
             # remember the time that we found the tree
             frame_tag = np.full((cut_xyzs.shape[0], 1), self.frame_count)
             new_tree_data = np.hstack((cut_xyzs, cut_boxes, frame_tag))
 
+            existing_trees, existing_t_ids = self.fetch_tree_data()
+
             for new_d, tracking_id in zip(new_tree_data, tracking_ids):
+                # if tree is being tracked
                 if tracking_id in self.tree_index:
                     self.tree_index[tracking_id].append(new_d)
+                    continue
+
+                # if unable to associate det. with existing tracker, try to see if close
+                existing_t_id = self.find_existing(
+                    new_d, existing_trees, existing_t_ids
+                )
+
+                # prefer to associate tree with existing ones to prevent duplicates
+                if existing_t_id is not None:
+                    tracking_id = existing_t_id
                 else:
                     self.tree_index[tracking_id] = [new_d]
 
     def fetch_tree_data(self):
         """Read the tree index and prepare an average of values"""
-        # ret_tracking_ids = []
         ret_tree_data = []
 
-        for t_id, tree_data in self.tree_index.items():
+        for tree_data in self.tree_index.values():
             # compute the mean of existing values
             tree_data = np.vstack(tree_data)
             ret_tree_data.append(np.mean(tree_data, axis=0))
-            # ret_tracking_ids.append(t_id)
 
         if len(ret_tree_data) > 0:
-            return np.vstack(ret_tree_data)  # , ret_tracking_ids
-        return np.empty((0, 7))  # , []
+            return np.vstack(ret_tree_data), list(self.tree_index.keys())
+        return np.empty((0, 7)), []
 
     def process(self, rgb_img: np.ndarray, pcl: np.ndarray):
         # pass image through model
@@ -243,7 +299,11 @@ class TreeDetector:
         # extract cutting info from the tracked trees
         start = time.perf_counter()
         cut_xyzs, cut_boxes, tracking_ids = get_cutting_data(
-            trackers[:, :4], tracked_kpts, trackers[:, 4], pcl, fit_cylinder=False
+            trackers[:, :4],
+            tracked_kpts,
+            trackers[:, 4],
+            pcl,
+            fit_cylinder=FIT_CYLINDER,
         )
 
         assert cut_xyzs.shape[0] == cut_boxes.shape[0] and cut_boxes.shape[0] == len(
@@ -262,16 +322,23 @@ class TreeDetector:
             tracking_ids=tracking_ids,
         )
 
-        map_tree_data = self.fetch_tree_data()
+        tree_cutting_data, tracking_ids = self.fetch_tree_data()
 
         print(
             f"extract_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms"
         )
 
         # transform the cutting point coordinates in map frame
-        # detection_pub.publish(np_to_pcd2(XYZ=map_tree_data[:, :3], frame="map"))
-        marker_pub.publish(
-            np_to_markers(map_tree_data[:, :3], map_tree_data[:, 3:6], "map")
+        self.felling_cut_pub.publish(
+            np_to_pcd2(XYZ=tree_cutting_data[:, :3], frame="map")
+        )
+        self.detection_pub.publish(
+            np_to_hvri_det_trees(
+                tree_cutting_data[:, :3],
+                tree_cutting_data[:, 3:6],
+                tracking_ids,
+                frame="map",
+            )
         )
 
 
