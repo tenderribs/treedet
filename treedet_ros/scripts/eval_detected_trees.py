@@ -53,17 +53,49 @@ def create_marker(
     return marker_array
 
 
+def rotate(xyz: np.ndarray):
+    rad = 7 / 6 * np.pi
+    T = np.array(
+        [
+            [np.cos(rad), -np.sin(rad), 0],
+            [np.sin(rad), np.cos(rad), 0],
+            [0, 0, 1],
+        ]
+    )
+    return (T @ xyz.T).T
+
+
 def plot(
     dets: np.ndarray,
     targets: np.ndarray,
     min_distances: "list[float]",
     det_counts: "list[int]",
 ):
+    # display the centerline of robot motion
+    view_frustums = np.load("view_frustums.npy")
+    diff = view_frustums[0::8, :] - view_frustums[1::8, :]
+    center_line = view_frustums[1::8, :] + diff / 2
+
+    dets = rotate(dets)
+    targets = rotate(targets)
+    center_line = rotate(center_line)
+
+    dets = dets[dets[:, 1] <= 150]
+    center_line = center_line[center_line[:, 1] <= 150]
+
     plt.scatter(dets[:, 1], dets[:, 0], c="g", label="Detections")
     plt.scatter(targets[:, 1], targets[:, 0], c="r", label="Targets")
 
+    plt.scatter(
+        center_line[0::5, 1],
+        center_line[0::5, 0],
+        c="b",
+        label="Robot Odometry",
+        s=0.3,
+    )
+
     for i, (dist, count, targ) in enumerate(zip(min_distances, det_counts, targets)):
-        text: str = f"{round(dist, 2)}m, {count}" if count > 0 else f"{round(dist, 2)}m"
+        text: str = f"{round(dist, 2)}m"
         plt.text(targ[1], targ[0] - 2, text, fontsize=12, ha="center")
         circle = plt.Circle(
             (targ[1], targ[0]), FOUND_THRESHOLD, color="b", fill=True, alpha=0.15
