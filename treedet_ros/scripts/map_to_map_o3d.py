@@ -140,7 +140,7 @@ if __name__ == "__main__":
     else:
         xyz_map = np.load("xyz_map.npy")
 
-    pcd_map_o3d = o3d.io.read_point_cloud("/datasets/maps/straight_line_cropped.pcd")
+    pcd_map_o3d = o3d.io.read_point_cloud("/datasets/maps/straight_line.pcd")
     xyz_map_o3d = np.asarray(pcd_map_o3d.points)
 
     # # remember the original values
