@@ -17,7 +17,7 @@ from treedet_ros.cutting_data import uv2xyz
 
 
 Z_MIN = 0.1
-Z_MAX = 12
+Z_MAX = 10
 
 RECORD_INTERVAL = 0.2  # record every x seconds
 
@@ -104,7 +104,7 @@ def main():
     view_frustums_o3d = apply_hom_tf(view_frustums, src="map", dest="map_o3d")
 
     mark_viewport_visbility("tree_targets.csv", view_frustums_o3d)
-    mark_viewport_visbility("tree_detections.csv", view_frustums)
+    # mark_viewport_visbility("tree_detections.csv", view_frustums)
 
 
 if __name__ == "__main__":

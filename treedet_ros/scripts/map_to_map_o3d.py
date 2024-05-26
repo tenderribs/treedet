@@ -90,13 +90,13 @@ def plot(xyz_map, xyz_map_o3d):
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
 
-    # ax.scatter(xyz_map[:, 0], xyz_map[:, 1], xyz_map[:, 2], label="xyz_map")
-    ax.scatter(
-        view_frustums[:, 0],
-        view_frustums[:, 1],
-        view_frustums[:, 2],
-        label="view_frustums",
-    )
+    ax.scatter(xyz_map[:, 0], xyz_map[:, 1], xyz_map[:, 2], label="xyz_map")
+    # ax.scatter(
+    #     view_frustums[:, 0],
+    #     view_frustums[:, 1],
+    #     view_frustums[:, 2],
+    #     label="view_frustums",
+    # )
     ax.scatter(
         xyz_map_o3d[:, 0], xyz_map_o3d[:, 1], xyz_map_o3d[:, 2], label="xyz_map_o3d"
     )
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     else:
         xyz_map = np.load("xyz_map.npy")
 
-    pcd_map_o3d = o3d.io.read_point_cloud("/datasets/maps/map_small.pcd")
+    pcd_map_o3d = o3d.io.read_point_cloud("/datasets/maps/straight_line_cropped.pcd")
     xyz_map_o3d = np.asarray(pcd_map_o3d.points)
 
     # # remember the original values
@@ -175,4 +175,4 @@ if __name__ == "__main__":
     print(f"final matrx:\n{T}")
 
     xyz_map_o3d = apply_hom_matrix(T, xyz_map_o3d)
-    plot(xyz_map, xyz_map_o3d)
+    plot(subsample(xyz_map, 0.1), subsample(xyz_map_o3d, 0.1))

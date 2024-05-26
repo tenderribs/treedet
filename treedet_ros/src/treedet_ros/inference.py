@@ -131,7 +131,7 @@ class PointCloudTransformer:
 
 class TreeDetector:
     def __init__(self):
-        br = CvBridge()
+        self.br = CvBridge()
 
         self.felling_cut_pub = rospy.Publisher(
             "/treedet/felling_cut", PointCloud2, queue_size=10

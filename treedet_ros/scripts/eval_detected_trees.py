@@ -85,7 +85,7 @@ def do_eval(dets: pd.DataFrame, targets: pd.DataFrame):
     dets = dets[["pos_x", "pos_y", "pos_z"]].to_numpy()
     targets = targets[["pos_x", "pos_y", "pos_z"]].to_numpy()
 
-    dets = apply_hom_tf(dets, src="map", dest="map_o3d")
+    targets = apply_hom_tf(targets, src="map_o3d", dest="map")
 
     min_distances = []
     det_counts = []
@@ -121,8 +121,7 @@ def main():
     dets = pd.read_csv("tree_detections.csv")
     targets = pd.read_csv("tree_targets.csv")
 
-    # only consider the visible trees and detections
-    dets = dets[dets["visible"] == True]
+    # only consider the visible targets from camera's perspective
     targets = targets[targets["visible"] == True]
 
     do_eval(dets, targets)
