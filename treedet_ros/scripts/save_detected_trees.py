@@ -43,10 +43,6 @@ def shutdown_hook():
 if __name__ == "__main__":
     rospy.init_node("treedet_detection_subscriber")
 
-    targets = pd.read_csv("trees_targets.csv")
-    targets = targets[targets["selected"] == True]
-    targets["found"] = False
-
     rospy.Subscriber(
         "/treedet/detected_trees", HarveriDetectedTrees, detected_trees_callback
     )
