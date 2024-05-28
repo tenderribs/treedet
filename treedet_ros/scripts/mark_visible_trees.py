@@ -17,7 +17,7 @@ from treedet_ros.cutting_data import uv2xyz
 
 
 Z_MIN = 0.1
-Z_MAX = 10
+Z_MAX = 15
 
 RECORD_INTERVAL = 0.2  # record every x seconds
 
@@ -74,7 +74,6 @@ def record_frustums():
 
 
 def main():
-
     package_path = rospkg.RosPack().get_path("treedet_ros")
     base_path = os.path.join(package_path, "scripts")
 
@@ -88,21 +87,25 @@ def main():
 
     def mark_viewport_visbility(filename: str, _frustums):
         df = pd.read_csv(os.path.join(base_path, filename))
-        centerpoints = df[["pos_x", "pos_y", "pos_z"]].to_numpy()
 
-        hull = Delaunay(points=_frustums)
-        is_center_inside_frustum = hull.find_simplex(centerpoints) >= 0
+        # precompute the convex hulls of each frustum
+        hulls = [Delaunay(points=_frustums[i : (8 + i), :]) for i in range(0, len(_frustums), 8)]
 
-        df["visible"] = is_center_inside_frustum
-        print(f"found {np.sum(is_center_inside_frustum)} targets in view frustums for {filename}")
+        # determine whether any target's centers are contained within the convex hulls
+        visibility_mask = np.zeros(len(df), dtype=bool)
+        centers = df[["pos_x", "pos_y", "pos_z"]].to_numpy()
+        for hull in hulls:
+            visibility_mask |= hull.find_simplex(centers) >= 0
 
+        df.loc[visibility_mask, "visible"] = True
         df.to_csv(os.path.join(base_path, filename), index=False)
+
+        print(f"marked {len(df[df['visible'] == True])} targets as visible")
 
     # transform the recorded frustums to the map_o3d frame
     view_frustums_o3d = apply_hom_tf(view_frustums, src="map", dest="map_o3d")
 
     mark_viewport_visbility("tree_targets.csv", view_frustums_o3d)
-    # mark_viewport_visbility("tree_detections.csv", view_frustums)
 
 
 if __name__ == "__main__":
