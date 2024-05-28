@@ -133,9 +133,7 @@ class TreeDetector:
     def __init__(self):
         self.br = CvBridge()
 
-        self.felling_cut_pub = rospy.Publisher(
-            "/treedet/felling_cut", PointCloud2, queue_size=10
-        )
+        self.felling_cut_pub = rospy.Publisher("/treedet/felling_cut", PointCloud2, queue_size=10)
         self.detection_pub = rospy.Publisher(
             "/treedet/detected_trees", HarveriDetectedTrees, queue_size=10
         )
@@ -180,8 +178,11 @@ class TreeDetector:
             self.data_buffer[0].append(comp_image)
 
     def lidar_callback(self, pcd: PointCloud2) -> None:
-        with self.lock:
-            self.data_buffer[1].append(pcd)
+        pcd = self.pcl_transformer.tf(pcd, "PandarQT", "zed2i_left_camera_optical_frame")
+
+        if pcd:
+            with self.lock:
+                self.data_buffer[1].append(pcd)
 
     def timer_callback(self, event) -> None:
         with self.lock:
@@ -191,21 +192,15 @@ class TreeDetector:
                 rgb_img: np.ndarray = self.br.compressed_imgmsg_to_cv2(rgb_msg)
                 rgb_img = rgb_img[:, :, :3]  # cut out the alpha channel (bgra8 -> bgr8)
 
+                print(f"lidar buffer len {len(self.data_buffer[1])}")
                 lidar_pcl: PointCloud2 = self.data_buffer[1][-1]
 
-                lidar_pcl = self.pcl_transformer.tf(
-                    lidar_pcl, "PandarQT", "zed2i_left_camera_optical_frame"
-                )
-
-                if lidar_pcl:
-                    lidar_pcl: np.ndarray = pc2_to_np(lidar_pcl)
-                    self.process(rgb_img, lidar_pcl)
+                lidar_pcl: np.ndarray = pc2_to_np(lidar_pcl)
+                self.process(rgb_img, lidar_pcl)
 
                 self.data_buffer = ([], [])
 
-    def find_existing(
-        self, new_d: np.ndarray, existing_trees: np.ndarray, existing_t_ids: list
-    ):
+    def find_existing(self, new_d: np.ndarray, existing_trees: np.ndarray, existing_t_ids: list):
         if existing_trees.shape[0] == 0:
             return None
 
@@ -252,9 +247,7 @@ class TreeDetector:
                     continue
 
                 # if unable to associate det. with existing tracker, try to see if close
-                existing_t_id = self.find_existing(
-                    new_d, existing_trees, existing_t_ids
-                )
+                existing_t_id = self.find_existing(new_d, existing_trees, existing_t_ids)
 
                 # prefer to associate tree with existing ones to prevent duplicates
                 if existing_t_id is not None:
@@ -306,9 +299,7 @@ class TreeDetector:
             fit_cylinder=FIT_CYLINDER,
         )
 
-        assert cut_xyzs.shape[0] == cut_boxes.shape[0] and cut_boxes.shape[0] == len(
-            tracking_ids
-        )
+        assert cut_xyzs.shape[0] == cut_boxes.shape[0] and cut_boxes.shape[0] == len(tracking_ids)
 
         map_cut_pcd = self.pcl_transformer.tf(
             np_to_pcd2(cut_xyzs, "zed2i_left_camera_optical_frame"),
@@ -324,14 +315,10 @@ class TreeDetector:
 
         tree_cutting_data, tracking_ids = self.fetch_tree_data()
 
-        print(
-            f"extract_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms"
-        )
+        print(f"extract_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
         # transform the cutting point coordinates in map frame
-        self.felling_cut_pub.publish(
-            np_to_pcd2(XYZ=tree_cutting_data[:, :3], frame="map")
-        )
+        self.felling_cut_pub.publish(np_to_pcd2(XYZ=tree_cutting_data[:, :3], frame="map"))
         self.detection_pub.publish(
             np_to_hvri_det_trees(
                 tree_cutting_data[:, :3],
