@@ -12,47 +12,6 @@ from visualization_msgs.msg import MarkerArray
 FOUND_THRESHOLD = 1.0
 
 
-def create_marker(
-    df,
-    color=(0, 1, 0),
-):
-    marker_array = MarkerArray()
-
-    for idx, row in df.iterrows():
-        marker = Marker()
-        marker.header.frame_id = "map"
-        marker.header.stamp = rospy.Time.now()
-        marker.ns = "trees"
-        marker.id = idx * 2
-        marker.type = Marker.CYLINDER
-        marker.action = Marker.ADD
-
-        # Set the position
-        marker.pose.position.x = row["pos_x"]
-        marker.pose.position.y = row["pos_y"]
-        marker.pose.position.z = row["pos_z"] + row["dim_z"] / 2
-
-        # Set the orientation (quaternion, here just identity since it's a cylinder)
-        marker.pose.orientation.x = 0.0
-        marker.pose.orientation.y = 0.0
-        marker.pose.orientation.z = 0.0
-        marker.pose.orientation.w = 1.0
-
-        # Set the scale of the cylinder
-        marker.scale.x = row["dim_x"]  # diameter
-        marker.scale.y = row["dim_x"]  # diameter
-        marker.scale.z = row["dim_z"]  # height
-
-        # Set the color (here just an example, RGBA)
-        marker.color.r = color[0]
-        marker.color.g = color[1]
-        marker.color.b = color[2]
-        marker.color.a = 1.0
-        marker_array.markers.append(marker)
-
-    return marker_array
-
-
 def rotate(xyz: np.ndarray):
     rad = 7 / 6 * np.pi
     T = np.array(
@@ -147,6 +106,59 @@ def do_eval(dets: pd.DataFrame, targets: pd.DataFrame):
     plot(dets, targets, min_distances, det_counts)
 
 
+def pub_markers(dets: pd.DataFrame, targets: pd.DataFrame):
+    def create_marker(
+        df,
+        color=(0, 1, 0),
+    ):
+        marker_array = MarkerArray()
+
+        for idx, row in df.iterrows():
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.header.stamp = rospy.Time.now()
+            marker.ns = "trees"
+            marker.id = idx * 2
+            marker.type = Marker.CYLINDER
+            marker.action = Marker.ADD
+
+            # Set the position
+            marker.pose.position.x = row["pos_x"]
+            marker.pose.position.y = row["pos_y"]
+            marker.pose.position.z = row["pos_z"]
+
+            # Set the orientation (quaternion, here just identity since it's a cylinder)
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 0.0
+            marker.pose.orientation.w = 1.0
+
+            # Set the scale of the cylinder
+            marker.scale.x = row["dim_x"]  # diameter
+            marker.scale.y = row["dim_x"]  # diameter
+            marker.scale.z = row["dim_z"]  # height
+
+            # Set the color (here just an example, RGBA)
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+            marker.color.a = 1
+            marker_array.markers.append(marker)
+
+        return marker_array
+
+    rospy.init_node("eval_detected_trees")
+
+    dets_pub = rospy.Publisher("/treedet_ros/viz_dets", MarkerArray, queue_size=10)
+    targets_pub = rospy.Publisher("/treedet_ros/viz_targets", MarkerArray, queue_size=10)
+
+    r = rospy.Rate(1)
+    while not rospy.is_shutdown():
+        dets_pub.publish(create_marker(dets, color=(0, 1, 0)))
+        targets_pub.publish(create_marker(targets, color=(1, 0, 0)))
+        r.sleep()
+
+
 def main():
     dets = pd.read_csv("tree_detections.csv")
     targets = pd.read_csv("tree_targets.csv")
@@ -155,6 +167,12 @@ def main():
     targets = targets[targets["visible"] == True]
 
     do_eval(dets, targets)
+
+    dets_np = dets[["pos_x", "pos_y", "pos_z"]].to_numpy()
+    dets_np = apply_hom_tf(dets_np, "map", "map_o3d")
+    dets[["pos_x", "pos_y", "pos_z"]] = dets_np
+    # pub_markers(dets, targets)
+
     return
 
 
