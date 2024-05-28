@@ -94,9 +94,7 @@ def main():
         is_center_inside_frustum = hull.find_simplex(centerpoints) >= 0
 
         df["visible"] = is_center_inside_frustum
-        print(
-            f"found {np.sum(is_center_inside_frustum)} targets in view frustums for {filename}"
-        )
+        print(f"found {np.sum(is_center_inside_frustum)} targets in view frustums for {filename}")
 
         df.to_csv(os.path.join(base_path, filename), index=False)
 

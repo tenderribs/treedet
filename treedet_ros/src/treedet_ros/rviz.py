@@ -62,9 +62,7 @@ def view_trackers(tracked, tracked_kpts, rgb_img):
 
         color = ((t[4] * 75) % 255, (t[4] * 50) % 255, (t[4] * 150) % 255)
         cv2.rectangle(rgb_img, p1, p2, color, thickness=2)
-        cv2.circle(
-            rgb_img, (int(kpts[0]), int(kpts[1])), radius=4, color=color, thickness=-1
-        )
+        cv2.circle(rgb_img, (int(kpts[0]), int(kpts[1])), radius=4, color=color, thickness=-1)
 
     cv2.imshow("Image with Bounding Boxes", rgb_img)
     cv2.waitKey(2)  # Wait for a key press to close

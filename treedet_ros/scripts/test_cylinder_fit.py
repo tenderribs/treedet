@@ -137,9 +137,7 @@ ax.set_ylabel("Y")
 ax.set_zlabel("Z")
 
 ax.scatter(pcl[:, 0], pcl[:, 1], pcl[:, 2], label="Filtered LiDAR pcl", alpha=0.1)
-ax.scatter(
-    cylinder_tf[:, 0], cylinder_tf[:, 1], cylinder_tf[:, 2], label="cylinder", alpha=0.1
-)
+ax.scatter(cylinder_tf[:, 0], cylinder_tf[:, 1], cylinder_tf[:, 2], label="cylinder", alpha=0.1)
 ax.scatter(p_fc[0], p_fc[1], p_fc[2], label="p_fc")
 
 set_axes_equal(ax)

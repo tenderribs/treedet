@@ -97,9 +97,7 @@ def plot(
     for i, (dist, count, targ) in enumerate(zip(min_distances, det_counts, targets)):
         text: str = f"{round(dist, 2)}m"
         plt.text(targ[1], targ[0] - 2, text, fontsize=12, ha="center")
-        circle = plt.Circle(
-            (targ[1], targ[0]), FOUND_THRESHOLD, color="b", fill=True, alpha=0.15
-        )
+        circle = plt.Circle((targ[1], targ[0]), FOUND_THRESHOLD, color="b", fill=True, alpha=0.15)
         plt.gca().add_patch(circle)
 
     plt.xlabel("Y [m]")

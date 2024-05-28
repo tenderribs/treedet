@@ -116,9 +116,7 @@ if __name__ == "__main__":
     input_shape = tuple(map(int, args.input_shape.split(",")))
 
     image_files = [
-        f
-        for f in os.listdir(args.images_path)
-        if os.path.isfile(os.path.join(args.images_path, f))
+        f for f in os.listdir(args.images_path) if os.path.isfile(os.path.join(args.images_path, f))
     ]
     image_files = [
         f for f in image_files if f.lower().endswith((".png", ".jpg", ".jpeg"))
