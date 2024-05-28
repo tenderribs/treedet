@@ -17,7 +17,7 @@ from treedet_ros.cutting_data import uv2xyz
 
 
 Z_MIN = 0.1
-Z_MAX = 15
+Z_MAX = 4.14  # selected based on harveri manual. maximum is 6m
 
 RECORD_INTERVAL = 0.2  # record every x seconds
 
@@ -97,6 +97,7 @@ def main():
         for hull in hulls:
             visibility_mask |= hull.find_simplex(centers) >= 0
 
+        df["visible"] = False
         df.loc[visibility_mask, "visible"] = True
         df.to_csv(os.path.join(base_path, filename), index=False)
 

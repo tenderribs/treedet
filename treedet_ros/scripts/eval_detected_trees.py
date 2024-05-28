@@ -32,26 +32,21 @@ def plot(
 ):
     # display the centerline of robot motion
     view_frustums = np.load("view_frustums.npy")
+
     diff = view_frustums[0::8, :] - view_frustums[1::8, :]
     center_line = view_frustums[1::8, :] + diff / 2
 
     dets = rotate(dets)
     targets = rotate(targets)
     center_line = rotate(center_line)
+    view_frustums = rotate(view_frustums)
 
     dets = dets[dets[:, 1] <= 150]
     center_line = center_line[center_line[:, 1] <= 150]
 
     plt.scatter(dets[:, 1], dets[:, 0], c="g", label="Detections")
     plt.scatter(targets[:, 1], targets[:, 0], c="r", label="Targets")
-
-    plt.scatter(
-        center_line[0::5, 1],
-        center_line[0::5, 0],
-        c="b",
-        label="Robot Odometry",
-        s=0.3,
-    )
+    plt.scatter(center_line[::4, 1], center_line[::4, 0], c="b", label="Robot Odometry", s=0.3)
 
     for i, (dist, count, targ) in enumerate(zip(min_distances, det_counts, targets)):
         text: str = f"{round(dist, 2)}m"
@@ -61,7 +56,7 @@ def plot(
 
     plt.xlabel("Y [m]")
     plt.ylabel("X [m]")
-    plt.title("Distance between tree target and closest detection")
+    plt.title("Target detection at 15m view frustum depth")
     plt.gca().set_aspect("equal", adjustable="box")  # Set equal aspect ratio
 
     plt.legend()
@@ -168,9 +163,9 @@ def main():
 
     do_eval(dets, targets)
 
-    dets_np = dets[["pos_x", "pos_y", "pos_z"]].to_numpy()
-    dets_np = apply_hom_tf(dets_np, "map", "map_o3d")
-    dets[["pos_x", "pos_y", "pos_z"]] = dets_np
+    # dets_np = dets[["pos_x", "pos_y", "pos_z"]].to_numpy()
+    # dets_np = apply_hom_tf(dets_np, "map", "map_o3d")
+    # dets[["pos_x", "pos_y", "pos_z"]] = dets_np
     # pub_markers(dets, targets)
 
     return
