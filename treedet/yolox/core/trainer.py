@@ -141,9 +141,7 @@ class Trainer:
             torch.cuda.set_device(self.local_rank)
         #
         model = self.exp.get_model()
-        logger.info(
-            "Model Summary: {}".format(get_model_info(model, self.exp.test_size))
-        )
+        logger.info("Model Summary: {}".format(get_model_info(model, self.exp.test_size)))
         model.to(self.device)
 
         # solver related init
@@ -212,9 +210,7 @@ class Trainer:
         wandb.finish()
 
         logger.info(
-            "Training of experiment is done and the best AP is {:.2f}".format(
-                self.best_ap * 100
-            )
+            "Training of experiment is done and the best AP is {:.2f}".format(self.best_ap * 100)
         )
 
     def before_epoch(self):
@@ -285,9 +281,7 @@ class Trainer:
             )
             self.start_epoch = start_epoch
             logger.info(
-                "loaded checkpoint '{}' (epoch {})".format(
-                    self.args.resume, self.start_epoch
-                )
+                "loaded checkpoint '{}' (epoch {})".format(self.args.resume, self.start_epoch)
             )  # noqa
         else:
             if self.args.ckpt is not None:
@@ -307,9 +301,7 @@ class Trainer:
             if is_parallel(evalmodel):
                 evalmodel = evalmodel.module
 
-        ap50_95, ap50, summary = self.exp.eval(
-            evalmodel, self.evaluator, self.is_distributed
-        )
+        ap50_95, ap50, summary = self.exp.eval(evalmodel, self.evaluator, self.is_distributed)
         self.model.train()
 
         if self.rank == 0:

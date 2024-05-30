@@ -43,8 +43,6 @@ def shutdown_hook():
 if __name__ == "__main__":
     rospy.init_node("treedet_detection_subscriber")
 
-    rospy.Subscriber(
-        "/treedet/detected_trees", HarveriDetectedTrees, detected_trees_callback
-    )
+    rospy.Subscriber("/treedet/detected_trees", HarveriDetectedTrees, detected_trees_callback)
     rospy.on_shutdown(shutdown_hook)
     rospy.spin()

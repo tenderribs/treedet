@@ -12,47 +12,6 @@ from visualization_msgs.msg import MarkerArray
 FOUND_THRESHOLD = 1.0
 
 
-def create_marker(
-    df,
-    color=(0, 1, 0),
-):
-    marker_array = MarkerArray()
-
-    for idx, row in df.iterrows():
-        marker = Marker()
-        marker.header.frame_id = "map"
-        marker.header.stamp = rospy.Time.now()
-        marker.ns = "trees"
-        marker.id = idx * 2
-        marker.type = Marker.CYLINDER
-        marker.action = Marker.ADD
-
-        # Set the position
-        marker.pose.position.x = row["pos_x"]
-        marker.pose.position.y = row["pos_y"]
-        marker.pose.position.z = row["pos_z"] + row["dim_z"] / 2
-
-        # Set the orientation (quaternion, here just identity since it's a cylinder)
-        marker.pose.orientation.x = 0.0
-        marker.pose.orientation.y = 0.0
-        marker.pose.orientation.z = 0.0
-        marker.pose.orientation.w = 1.0
-
-        # Set the scale of the cylinder
-        marker.scale.x = row["dim_x"]  # diameter
-        marker.scale.y = row["dim_x"]  # diameter
-        marker.scale.z = row["dim_z"]  # height
-
-        # Set the color (here just an example, RGBA)
-        marker.color.r = color[0]
-        marker.color.g = color[1]
-        marker.color.b = color[2]
-        marker.color.a = 1.0
-        marker_array.markers.append(marker)
-
-    return marker_array
-
-
 def rotate(xyz: np.ndarray):
     rad = 7 / 6 * np.pi
     T = np.array(
@@ -73,38 +32,31 @@ def plot(
 ):
     # display the centerline of robot motion
     view_frustums = np.load("view_frustums.npy")
+
     diff = view_frustums[0::8, :] - view_frustums[1::8, :]
     center_line = view_frustums[1::8, :] + diff / 2
 
     dets = rotate(dets)
     targets = rotate(targets)
     center_line = rotate(center_line)
+    view_frustums = rotate(view_frustums)
 
     dets = dets[dets[:, 1] <= 150]
     center_line = center_line[center_line[:, 1] <= 150]
 
     plt.scatter(dets[:, 1], dets[:, 0], c="g", label="Detections")
     plt.scatter(targets[:, 1], targets[:, 0], c="r", label="Targets")
-
-    plt.scatter(
-        center_line[0::5, 1],
-        center_line[0::5, 0],
-        c="b",
-        label="Robot Odometry",
-        s=0.3,
-    )
+    plt.scatter(center_line[::4, 1], center_line[::4, 0], c="b", label="Robot Odometry", s=0.3)
 
     for i, (dist, count, targ) in enumerate(zip(min_distances, det_counts, targets)):
         text: str = f"{round(dist, 2)}m"
         plt.text(targ[1], targ[0] - 2, text, fontsize=12, ha="center")
-        circle = plt.Circle(
-            (targ[1], targ[0]), FOUND_THRESHOLD, color="b", fill=True, alpha=0.15
-        )
+        circle = plt.Circle((targ[1], targ[0]), FOUND_THRESHOLD, color="b", fill=True, alpha=0.15)
         plt.gca().add_patch(circle)
 
     plt.xlabel("Y [m]")
     plt.ylabel("X [m]")
-    plt.title("Distance between tree target and closest detection")
+    plt.title("Target detection at 15m view frustum depth")
     plt.gca().set_aspect("equal", adjustable="box")  # Set equal aspect ratio
 
     plt.legend()
@@ -149,6 +101,59 @@ def do_eval(dets: pd.DataFrame, targets: pd.DataFrame):
     plot(dets, targets, min_distances, det_counts)
 
 
+def pub_markers(dets: pd.DataFrame, targets: pd.DataFrame):
+    def create_marker(
+        df,
+        color=(0, 1, 0),
+    ):
+        marker_array = MarkerArray()
+
+        for idx, row in df.iterrows():
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.header.stamp = rospy.Time.now()
+            marker.ns = "trees"
+            marker.id = idx * 2
+            marker.type = Marker.CYLINDER
+            marker.action = Marker.ADD
+
+            # Set the position
+            marker.pose.position.x = row["pos_x"]
+            marker.pose.position.y = row["pos_y"]
+            marker.pose.position.z = row["pos_z"]
+
+            # Set the orientation (quaternion, here just identity since it's a cylinder)
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 0.0
+            marker.pose.orientation.w = 1.0
+
+            # Set the scale of the cylinder
+            marker.scale.x = row["dim_x"]  # diameter
+            marker.scale.y = row["dim_x"]  # diameter
+            marker.scale.z = row["dim_z"]  # height
+
+            # Set the color (here just an example, RGBA)
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+            marker.color.a = 1
+            marker_array.markers.append(marker)
+
+        return marker_array
+
+    rospy.init_node("eval_detected_trees")
+
+    dets_pub = rospy.Publisher("/treedet_ros/viz_dets", MarkerArray, queue_size=10)
+    targets_pub = rospy.Publisher("/treedet_ros/viz_targets", MarkerArray, queue_size=10)
+
+    r = rospy.Rate(1)
+    while not rospy.is_shutdown():
+        dets_pub.publish(create_marker(dets, color=(0, 1, 0)))
+        targets_pub.publish(create_marker(targets, color=(1, 0, 0)))
+        r.sleep()
+
+
 def main():
     dets = pd.read_csv("tree_detections.csv")
     targets = pd.read_csv("tree_targets.csv")
@@ -157,6 +162,12 @@ def main():
     targets = targets[targets["visible"] == True]
 
     do_eval(dets, targets)
+
+    # dets_np = dets[["pos_x", "pos_y", "pos_z"]].to_numpy()
+    # dets_np = apply_hom_tf(dets_np, "map", "map_o3d")
+    # dets[["pos_x", "pos_y", "pos_z"]] = dets_np
+    # pub_markers(dets, targets)
+
     return
 
 

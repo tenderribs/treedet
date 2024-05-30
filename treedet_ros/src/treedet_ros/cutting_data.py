@@ -34,13 +34,6 @@ def uv2xyz(uv: np.ndarray, Z: float):
     return [X, Y, Z]
 
 
-# def uv2incl(ax1: np.ndarray, fc: np.ndarray) -> np.ndarray:
-#     """Get counter-clockwise inclination in radians of tree w.r.t the "upwards" vertical axis"""
-#     du = fc[:, 0] - ax1[:, 0]
-#     dv = fc[:, 1] - ax1[:, 1]
-#     return -(np.pi / 2 + np.arctan2(du, dv))
-
-
 def ray_vec(kpt: np.ndarray):
     """
     Get unit direction vec
@@ -88,26 +81,29 @@ def estimate_3d_tree_data(kpts: np.ndarray, pcl: np.ndarray):
     """
 
     w_fc = ray_vec(kpts[0:2])
-    w_l = ray_vec(kpts[3:5])
-    w_r = ray_vec(kpts[6:8])
     w_ax2 = ray_vec(kpts[12:14])
+    p_fc = estimate_3d(pcl, w_fc)
+    p_ax2 = estimate_3d(pcl, w_ax2)
 
-    # calculate the width of the tree as average of 3D eucl. dist from cut kpt to left and right kpts resp.
-    # rad_left = np.sqrt(np.sum((estimate_3d(pcl, w_l) - estimate_3d(pcl, w_fc)) ** 2))
-    # rad_right = np.sqrt(np.sum((estimate_3d(pcl, w_r) - estimate_3d(pcl, w_fc)) ** 2))
-    # radius = (rad_left + rad_right) / 2
+    def XY_from_uvZ(uv, Z):
+        X = (uv[0] - cx) * Z / fx
+        Y = (uv[1] - cy) * Z / fy
+        return np.array([X, Y])
 
-    # calculate height limited to x meters
-    # height = np.sqrt(np.sum((estimate_3d(pcl, w_fc) - estimate_3d(pcl, w_ax2)) ** 2))
-    # height = min(height, 2.0)
-    radius = 0.2
-    height = 2
+    l_uv = kpts[3:5]
+    r_uv = kpts[6:8]
 
-    fc3d = estimate_3d(pcl, w_fc)
+    # calculate the left and right 3D keypoints based on the depth info of felling cut point
+    XY_l = XY_from_uvZ(l_uv, p_fc[2])
+    XY_r = XY_from_uvZ(r_uv, p_fc[2])
+    radius = np.sqrt(np.sum((XY_l - XY_r) ** 2)) / 2
+    height = np.sqrt(np.sum((p_fc - p_ax2) ** 2))
+    print(f"radius {radius}")
+    print(f"height {height}")
     return (
         height,
         radius,
-        fc3d,
+        p_fc,
     )
 
 
@@ -162,9 +158,7 @@ def do_fit_cylinder(kpts: np.ndarray, pcl: np.ndarray):
 
     R = np.eye(3) + np.sin(theta) * K + (1 - np.cos(theta)) * np.dot(K, K)
 
-    cylinder = create_cylinder(
-        radius=radius, height=height, num_pts=pcl.shape[0] * 0.75
-    )
+    cylinder = create_cylinder(radius=radius, height=height, num_pts=pcl.shape[0] * 0.75)
 
     # ensure that equal number of points in pcl and cylinder
     if cylinder.shape[0] > pcl.shape[0]:
@@ -210,9 +204,7 @@ def get_cutting_data(
 
     cut_xyzs, dim_xyzs, valid_tracking_ids = [], [], []
 
-    pcl = pcl[
-        pcl[:, 2] >= 3
-    ]  # reject too close points or behind camera (reduces search space)
+    pcl = pcl[pcl[:, 2] >= 3]  # reject too close points or behind camera (reduces search space)
 
     # fit cylinder to each bbox
     for bbox, kpts, tracking_id in zip(bboxes, kpts, tracking_ids):
@@ -242,9 +234,7 @@ def get_cutting_data(
                 height, tree_radius, T_matrix = do_fit_cylinder(kpts=kpts, pcl=inside)
                 cut_xyz = T_matrix[:3, 3]  # translation part of T matrix
             else:
-                height, tree_radius, cut_xyz = estimate_3d_tree_data(
-                    kpts=kpts, pcl=inside
-                )
+                height, tree_radius, cut_xyz = estimate_3d_tree_data(kpts=kpts, pcl=inside)
 
             # felling cut 3d coords and 3d bounding box
             dim_xyz = np.array([2 * tree_radius, 2 * tree_radius, height])

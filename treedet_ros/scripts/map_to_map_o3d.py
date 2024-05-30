@@ -78,9 +78,7 @@ def plot(xyz_map, xyz_map_o3d):
 
     from treedet_ros.pcl import apply_hom_tf
 
-    view_frustums = apply_hom_tf(
-        np.load("view_frustums.npy"), src="map_o3d", dest="map"
-    )
+    view_frustums = apply_hom_tf(np.load("view_frustums.npy"), src="map_o3d", dest="map")
 
     print("plotting")
 
@@ -97,9 +95,7 @@ def plot(xyz_map, xyz_map_o3d):
     #     view_frustums[:, 2],
     #     label="view_frustums",
     # )
-    ax.scatter(
-        xyz_map_o3d[:, 0], xyz_map_o3d[:, 1], xyz_map_o3d[:, 2], label="xyz_map_o3d"
-    )
+    ax.scatter(xyz_map_o3d[:, 0], xyz_map_o3d[:, 1], xyz_map_o3d[:, 2], label="xyz_map_o3d")
     set_axes_equal(ax)
     ax.legend()
     plt.show()
@@ -157,9 +153,7 @@ if __name__ == "__main__":
 
     # create an initial guess for the transformation with dyaw, dx, dy = 0.43 rad, -1m, -5.3m):
     T_init = np.eye(4, 4)
-    T_init[:2, :2] = np.array(
-        [[np.cos(0.43), -np.sin(0.43)], [np.sin(0.43), np.cos(0.43)]]
-    )
+    T_init[:2, :2] = np.array([[np.cos(0.43), -np.sin(0.43)], [np.sin(0.43), np.cos(0.43)]])
     T_init[:3, 3] = [-1, -5.3, 0]
 
     def apply_hom_matrix(mat: np.ndarray, data):

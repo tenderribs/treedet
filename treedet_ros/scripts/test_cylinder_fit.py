@@ -72,46 +72,33 @@ def create_cylinder(radius=0.3, height=4, num_pts=50, part=0.3):
 
 
 w_fc = ray_vec(kpts[0:2])
-w_l = ray_vec(kpts[3:5])
-w_r = ray_vec(kpts[6:8])
-w_ax1 = ray_vec(kpts[9:11])
 w_ax2 = ray_vec(kpts[12:14])
+p_fc = estimate_3d(pcl, w_fc)
+p_ax2 = estimate_3d(pcl, w_ax2)
 
 
-# calculate the width of the tree based on initial estimate
-radius = np.sqrt(np.sum((estimate_3d(pcl, w_l) - estimate_3d(pcl, w_r)) ** 2)) / 2
+def XY_from_uvZ(uv, Z):
+    X = (uv[0] - cx) * Z / fx
+    Y = (uv[1] - cy) * Z / fy
+    return np.array([X, Y])
 
-# calculate height
-height = np.sqrt(np.sum((estimate_3d(pcl, w_fc) - estimate_3d(pcl, w_ax2)) ** 2))
 
-# calculate the 3D rotation matrix to rotate (0, -1, 0) to to tree orientation
-init_vec = np.array([0, -1, 0])
+l_uv = kpts[3:5]
+r_uv = kpts[6:8]
 
-fc3d = estimate_3d(pcl, w_fc)
 
-incl_vec = estimate_3d(pcl, w_ax1) - fc3d
-incl_vec /= np.linalg.norm(incl_vec)
+# calculate the left and right XY coordinates based on the felling cut depth
+P_lp = XY_from_uvZ(l_uv, p_fc[2])
+P_rp = XY_from_uvZ(r_uv, p_fc[2])
 
-rot_axis = np.cross(init_vec, incl_vec)
-rot_axis /= np.linalg.norm(rot_axis)
+a = 0.5 * np.linalg.norm(P_lp - P_rp)  # half of separation distance
+l1 = 0.5 * (np.linalg.norm(P_lp) + np.linalg.norm(P_rp))  # average of both points
+d = np.linalg.norm(p_fc[:2])
 
-cos_theta = np.dot(init_vec, incl_vec)
-theta = np.arccos(cos_theta)
+radius = ((l1 + a) ** 2 - d**2) / (2 * d)
+height = np.linalg.norm(p_ax2 - p_fc)
 
-# Rodrigues' rotation formula to find the rotation matrix
-K = np.array(
-    [
-        [0, -rot_axis[2], rot_axis[1]],
-        [rot_axis[2], 0, -rot_axis[0]],
-        [-rot_axis[1], rot_axis[0], 0],
-    ]
-)
-
-R = np.eye(3) + np.sin(theta) * K + (1 - np.cos(theta)) * np.dot(K, K)
-
-print(R)
-
-cylinder = create_cylinder(radius=radius, height=height, num_pts=pcl.shape[0])
+cylinder = create_cylinder(radius=radius, height=height, num_pts=pcl.shape[0], part=0.2)
 
 # ensure that equal number of points in pcl and cylinder
 if cylinder.shape[0] > pcl.shape[0]:
@@ -124,13 +111,13 @@ if pcl.shape[0] > cylinder.shape[0]:
 # find initial guess for T as centroid of the pcl with rotation based on the camera projection matrix:
 init = np.array(
     [
-        [1, 0, 0, fc3d[0]],
-        [0, 1, 0, fc3d[1]],  # move up a bit to prevent
-        [0, 0, 1, fc3d[2]],
+        [1, 0, 0, p_fc[0]],
+        [0, 1, 0, p_fc[1]],  # move up a bit to prevent
+        [0, 0, 1, p_fc[2]],
         [0, 0, 0, 1],
     ]
 )
-init[:3, :3] = R
+
 init_guess = np.column_stack([cylinder, np.ones(cylinder.shape[0])])
 init_guess = (init @ init_guess.T).T
 
@@ -141,7 +128,7 @@ cylinder_tf = (T @ cylinder_tf.T).T
 
 coords = T[:3, 3]
 
-print(f"ran ICP in {iters} iters")
+pcl = pcl[pcl[:, 2] <= 6]
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection="3d")
@@ -149,12 +136,11 @@ ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.set_zlabel("Z")
 
-# ax.scatter(cylinder[:, 0], cylinder[:, 1], cylinder[:, 2], label="Initial cylinder")
-# ax.scatter(init_guess[:, 0], init_guess[:, 1], init_guess[:, 2], label="Initial guess")
-ax.scatter(cylinder_tf[:, 0], cylinder_tf[:, 1], cylinder_tf[:, 2], label="Cylinder tf")
-# ax.scatter(pcl[:, 0], pcl[:, 1], pcl[:, 2], label="Filtered LiDAR pcl")
-ax.scatter(coords[0], coords[1], coords[2], label="Felling Cut Point")
+ax.scatter(pcl[:, 0], pcl[:, 1], pcl[:, 2], label="Filtered LiDAR pcl", alpha=0.1)
+ax.scatter(cylinder_tf[:, 0], cylinder_tf[:, 1], cylinder_tf[:, 2], label="cylinder", alpha=0.1)
+ax.scatter(p_fc[0], p_fc[1], p_fc[2], label="p_fc")
 
 set_axes_equal(ax)
 ax.legend()
 plt.show()
+print(f"ran ICP in {iters} iters")

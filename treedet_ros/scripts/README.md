@@ -14,7 +14,7 @@ The idea is to select some trees for cutting based on data in the rosbags and sa
 
 ### Construct global map
 
-Install [https://open3d-slam.readthedocs.io/en/latest/](Open3d SLAM) and then run on the rosbags of your choice (with map to odom transformations available). You probably need to switch the parameters of the LiDAR module in the launch file.
+Install [Open3d SLAM](https://open3d-slam.readthedocs.io/en/latest) and then run on the rosbags of your choice (with map to odom transformations available). You probably need to switch the parameters of the LiDAR module in the launch file.
 
 ```bash
 roslaunch open3d_slam_ros mapping.launch
@@ -45,6 +45,10 @@ roslaunch treedet_ros select_targets.launch
 ```bash
 # save detections from treedet_ros inference script
 roslaunch treedet_ros main.launch gui:=False
+```
+
+```sh
+rosrun pcl_ros pcd_to_pointcloud /datasets/maps/straight_line.pcd 1 _frame_id:=map
 ```
 
 ## `map_to_map_o3d.py`

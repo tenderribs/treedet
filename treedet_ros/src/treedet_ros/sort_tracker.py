@@ -93,9 +93,9 @@ def convert_x_to_bbox(x, score=None):
     w = np.sqrt(x[2] * x[3])
     h = x[2] / w
     if score == None:
-        return np.array(
-            [x[0] - w / 2.0, x[1] - h / 2.0, x[0] + w / 2.0, x[1] + h / 2.0]
-        ).reshape((1, 4))
+        return np.array([x[0] - w / 2.0, x[1] - h / 2.0, x[0] + w / 2.0, x[1] + h / 2.0]).reshape(
+            (1, 4)
+        )
     else:
         return np.array(
             [x[0] - w / 2.0, x[1] - h / 2.0, x[0] + w / 2.0, x[1] + h / 2.0, score]
@@ -136,9 +136,7 @@ class KalmanBoxTracker(object):
         )
 
         self.kf.R[2:, 2:] *= 10.0
-        self.kf.P[
-            4:, 4:
-        ] *= 1000.0  # give high uncertainty to the unobservable initial velocities
+        self.kf.P[4:, 4:] *= 1000.0  # give high uncertainty to the unobservable initial velocities
         self.kf.P *= 10.0
         self.kf.Q[-1, -1] *= 0.01
         self.kf.Q[4:, 4:] *= 0.01
@@ -319,12 +317,8 @@ def parse_args():
         help="Display online tracker output (slow) [False]",
         action="store_true",
     )
-    parser.add_argument(
-        "--seq_path", help="Path to detections.", type=str, default="data"
-    )
-    parser.add_argument(
-        "--phase", help="Subdirectory in seq_path.", type=str, default="train"
-    )
+    parser.add_argument("--seq_path", help="Path to detections.", type=str, default="data")
+    parser.add_argument("--phase", help="Subdirectory in seq_path.", type=str, default="train")
     parser.add_argument(
         "--max_age",
         help="Maximum number of frames to keep alive a track without associated detections.",
@@ -337,9 +331,7 @@ def parse_args():
         type=int,
         default=3,
     )
-    parser.add_argument(
-        "--iou_threshold", help="Minimum IOU for match.", type=float, default=0.3
-    )
+    parser.add_argument("--iou_threshold", help="Minimum IOU for match.", type=float, default=0.3)
     args = parser.parse_args()
     return args
 
@@ -383,9 +375,7 @@ if __name__ == "__main__":
                 total_frames += 1
 
                 if display:
-                    fn = os.path.join(
-                        "mot_benchmark", phase, seq, "img1", "%06d.jpg" % (frame)
-                    )
+                    fn = os.path.join("mot_benchmark", phase, seq, "img1", "%06d.jpg" % (frame))
                     im = io.imread(fn)
                     ax1.imshow(im)
                     plt.title(seq + " Tracked Targets")

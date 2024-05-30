@@ -25,9 +25,7 @@ os.makedirs(output_folder, exist_ok=True)
 
 # Get the list of image filenames in the first folder
 filenames = os.listdir(os.path.join(folder_base, folders[0]))
-filenames = [
-    file for file in filenames if file.endswith(".jpg") or file.endswith(".png")
-]
+filenames = [file for file in filenames if file.endswith(".jpg") or file.endswith(".png")]
 
 cols = 2
 
@@ -56,9 +54,7 @@ for file in filenames:
         corner_y = height * (idx // cols)
         new_image.paste(image, (corner_x, corner_y))
 
-        draw.rectangle(
-            [(corner_x, corner_y), (corner_x + 250, corner_y + 30)], fill="#fff"
-        )
+        draw.rectangle([(corner_x, corner_y), (corner_x + 250, corner_y + 30)], fill="#fff")
         draw.text((corner_x + 10, corner_y), label, fill="black", font=font)
 
     output_filename = os.path.join(output_folder, file)
