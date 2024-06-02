@@ -4,7 +4,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 from treedet_ros.icp import icp
-from treedet_ros.pcl import pc2 as pcl, kp2 as kpts, set_axes_equal
+from pcl import pc2 as pcl, kp2 as kpts, set_axes_equal
 
 # https://www.stereolabs.com/docs/positional-tracking/coordinate-frames
 

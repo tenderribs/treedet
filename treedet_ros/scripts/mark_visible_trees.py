@@ -7,11 +7,10 @@ import os
 import rospy
 import rospkg
 
-from rostopic import get_topic_class, ROSTopicException
 from sensor_msgs.msg import PointCloud2
 from scipy.spatial import Delaunay
 
-from treedet_ros.pcl import apply_hom_tf
+from pcl import apply_hom_tf
 from treedet_ros.inference import PointCloudTransformer, np_to_pcd2, pc2_to_np
 from treedet_ros.cutting_data import uv2xyz
 

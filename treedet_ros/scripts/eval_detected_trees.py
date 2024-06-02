@@ -4,7 +4,7 @@ import numpy as np
 import rospy
 import matplotlib.pyplot as plt
 
-from treedet_ros.pcl import apply_hom_tf
+from pcl import apply_hom_tf
 
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray

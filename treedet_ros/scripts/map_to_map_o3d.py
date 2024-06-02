@@ -76,7 +76,7 @@ def plot(xyz_map, xyz_map_o3d):
         ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
         ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
-    from treedet_ros.pcl import apply_hom_tf
+    from pcl import apply_hom_tf
 
     view_frustums = apply_hom_tf(np.load("view_frustums.npy"), src="map_o3d", dest="map")
 

@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 import onnxruntime
 import os
-import ros_numpy
 import rospy
 import rospkg
 import threading
@@ -21,7 +20,7 @@ from treedet_ros.sort_tracker import Sort
 
 RATE_LIMIT = 5.0
 MAX_TREE_LATERAL_ERR: float = 0.4
-DETECTION_CONF_THRESH: float = 0.95
+DETECTION_CONF_THRESH: float = 0.8
 TRACKER_MAX_AGE: int = 1
 DET_RETENTION_S: int = 1
 FIT_CYLINDER: bool = True
@@ -101,9 +100,9 @@ def get_detections(raw_dets: list, rescale_ratio: float):
 
 
 def pc2_to_np(pcl: PointCloud2):
-    pc_array = ros_numpy.point_cloud2.pointcloud2_to_array(pcl)
-    xyz_array = np.vstack((pc_array["x"], pc_array["y"], pc_array["z"])).transpose()
-    return xyz_array
+    pc2 = point_cloud2.read_points(pcl, field_names=("x", "y", "z"), skip_nans=True)
+    return np.array(list(pc2), dtype=np.float32)
+
 
 
 class PointCloudTransformer:
@@ -277,6 +276,8 @@ class TreeDetector:
 
         bboxes, confs, kpts = get_detections(output[0], ratio)
         print(f"get_detections:  \t{round((time.perf_counter() - start) * 1000, 1)} ms")
+
+        print(bboxes)
 
         # pass the detections through object tracker across frames. Tells us which trees are visible.
         # trackers: [:, bbox x1 y1 x2 y2, tracking_id]
