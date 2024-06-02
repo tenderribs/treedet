@@ -159,7 +159,6 @@ class TreeDetector:
             self.rgb_callback,
         )
 
-        # TODO: should set to self_filtered topic once available from RSL
         self.lidar_subscriber = rospy.Subscriber(
             "/hesai/pandar",
             PointCloud2,
