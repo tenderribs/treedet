@@ -10,6 +10,10 @@ project(treedet_ros)
 find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
+  sensor_msgs
+  tf2_ros
+  cv_bridge
+  message_generation
 )
 
 ## System dependencies are found with CMake's conventions

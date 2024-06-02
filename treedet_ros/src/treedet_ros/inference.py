@@ -104,7 +104,6 @@ def pc2_to_np(pcl: PointCloud2):
     return np.array(list(pc2), dtype=np.float32)
 
 
-
 class PointCloudTransformer:
     def __init__(self):
         # Initialize the tf2 buffer and listener once
