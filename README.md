@@ -6,11 +6,16 @@ The computer vision subfolder is based on [edgeai-yolox](https://github.com/Texa
 
 ## Getting Started
 
+Install the packages for running the rospy node running with
+
+```sh
+pip install onnxruntime numpy scikit-learn scikit-image filterpy
+```
+
 This project has a two configured VSCode Devcontainers in `.devcontainer` to facilitate setup for both ROS and ML model development.
 
-## ROS
 
-- For inference, copy an onnx file of your choice from the pretrained models into the root directory of `treedet_ros` as `treedet_ros/model.onnx`. The best-performing model is
+## ROS
 
 ### Nodes
 
@@ -37,7 +42,7 @@ To train the network, you need the synthetic and real datasets.
 
 - The best performing model is already located in the `treedet/treedet` folder in onnx format for your convenience. For the other model checkpoint files, check out this link: [Pretrained Model Checkpoint Files](https://drive.google.com/drive/folders/13LVyUGIS0vzHjzDNI97sHVZ7jDmVtHd1?usp=drive_link)
 
-- Here is the expected file system format for the datasets folder, starting from the `treedet/treedet` folder:
+- Here is the expected example file system format for the datasets folder, starting from the `treedet/treedet` folder:
 
 ```
 treedet/treedet
