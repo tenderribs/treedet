@@ -56,7 +56,7 @@ def plot(
 
     plt.xlabel("Y [m]")
     plt.ylabel("X [m]")
-    plt.title("Target detection at 15m view frustum depth")
+    plt.title("Target detection at x view frustum depth")
     plt.gca().set_aspect("equal", adjustable="box")  # Set equal aspect ratio
 
     plt.legend()
@@ -180,9 +180,10 @@ def main():
     plt.plot(list(recalls.keys()), list(recalls.values()), marker="o")
     plt.xlabel("Frustum Depth [m]")
     plt.ylabel("Targets detected [%]")
-    plt.title("Target detection success rate")
+    plt.title("Target Detection Rate of Drive-By")
     plt.grid(True)
     plt.show()
+
     # dets_np = dets[["pos_x", "pos_y", "pos_z"]].to_numpy()
     # dets_np = apply_hom_tf(dets_np, "map", "map_o3d")
     # dets[["pos_x", "pos_y", "pos_z"]] = dets_np
