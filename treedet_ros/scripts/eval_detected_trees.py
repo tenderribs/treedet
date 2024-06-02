@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 import rospy
@@ -31,22 +32,21 @@ def plot(
     det_counts: "list[int]",
 ):
     # display the centerline of robot motion
-    view_frustums = np.load("view_frustums.npy")
+    # view_frustums = np.load("view_frustums.npy")
 
-    diff = view_frustums[0::8, :] - view_frustums[1::8, :]
-    center_line = view_frustums[1::8, :] + diff / 2
+    # diff = view_frustums[0::8, :] - view_frustums[1::8, :]
+    # center_line = view_frustums[1::8, :] + diff / 2
 
     dets = rotate(dets)
     targets = rotate(targets)
-    center_line = rotate(center_line)
-    view_frustums = rotate(view_frustums)
+    # center_line = rotate(center_line) view_frustums = rotate(view_frustums)
 
     dets = dets[dets[:, 1] <= 150]
-    center_line = center_line[center_line[:, 1] <= 150]
+    # center_line = center_line[center_line[:, 1] <= 150]
 
     plt.scatter(dets[:, 1], dets[:, 0], c="g", label="Detections")
     plt.scatter(targets[:, 1], targets[:, 0], c="r", label="Targets")
-    plt.scatter(center_line[::4, 1], center_line[::4, 0], c="b", label="Robot Odometry", s=0.3)
+    # plt.scatter(center_line[::4, 1], center_line[::4, 0], c="b", label="Robot Odometry", s=0.3)
 
     for i, (dist, count, targ) in enumerate(zip(min_distances, det_counts, targets)):
         text: str = f"{round(dist, 2)}m"
@@ -96,9 +96,11 @@ def do_eval(dets: pd.DataFrame, targets: pd.DataFrame):
     print()
     print(f"precision:\t{tp / (tp + fp)}")
     print(f"recall:\t\t{tp / (tp + fn)}")
+    recall = tp / (tp + fn)
     print(f"accuracy:\t{(tp + tn) / (tp + fp + fn + tn)}")
 
-    plot(dets, targets, min_distances, det_counts)
+    # plot(dets, targets, min_distances, det_counts)
+    return recall * 100
 
 
 def pub_markers(dets: pd.DataFrame, targets: pd.DataFrame):
@@ -156,13 +158,31 @@ def pub_markers(dets: pd.DataFrame, targets: pd.DataFrame):
 
 def main():
     dets = pd.read_csv("tree_detections.csv")
-    targets = pd.read_csv("tree_targets.csv")
 
-    # only consider the visible targets from camera's perspective
-    targets = targets[targets["visible"] == True]
+    target_distances = [
+        int(file.split("map_o3d_targets_", 1)[1][:-4])
+        for file in os.listdir()
+        if "map_o3d_targets_" in file
+    ]
 
-    do_eval(dets, targets)
+    target_distances = sorted(target_distances)
 
+    recalls = {dist: -1.0 for dist in target_distances}
+
+    for dist in target_distances:
+        t_df = pd.read_csv(f"map_o3d_targets_{dist}.csv")
+
+        # only consider the visible targets from camera's perspective
+        t_df = t_df[t_df["visible"] == True]
+
+        recalls[dist] = do_eval(dets, t_df)
+
+    plt.plot(list(recalls.keys()), list(recalls.values()), marker="o")
+    plt.xlabel("Frustum Depth [m]")
+    plt.ylabel("Targets detected [%]")
+    plt.title("Target detection success rate")
+    plt.grid(True)
+    plt.show()
     # dets_np = dets[["pos_x", "pos_y", "pos_z"]].to_numpy()
     # dets_np = apply_hom_tf(dets_np, "map", "map_o3d")
     # dets[["pos_x", "pos_y", "pos_z"]] = dets_np

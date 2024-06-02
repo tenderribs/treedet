@@ -17,7 +17,8 @@ from treedet_ros.cutting_data import uv2xyz
 
 
 Z_MIN = 0.1
-Z_MAX = 4.14  # selected based on harveri manual. maximum is 6m
+# Z_MAX = 4.14  # selected based on harveri manual. maximum is 6m
+Z_MAXES = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
 RECORD_INTERVAL = 0.2  # record every x seconds
 
@@ -30,19 +31,26 @@ def is_topic_published(topic_name: str) -> bool:
 def record_frustums():
     bbox = np.array([0, 0, 640, 360])  # viewport as full screen bbox
 
-    frustum = np.array(  # calculate the frustum points for each bbox corner in the camera space
-        [
-            uv2xyz(bbox[[0, 1]], Z_MIN),
-            uv2xyz(bbox[[2, 1]], Z_MIN),
-            uv2xyz(bbox[[0, 3]], Z_MIN),
-            uv2xyz(bbox[[2, 3]], Z_MIN),
-            uv2xyz(bbox[[0, 1]], Z_MAX),
-            uv2xyz(bbox[[2, 1]], Z_MAX),
-            uv2xyz(bbox[[0, 3]], Z_MAX),
-            uv2xyz(bbox[[2, 3]], Z_MAX),
-        ]
-    )
-    view_frustum_pc2 = np_to_pcd2(frustum, frame="zed2i_left_camera_optical_frame")
+    cam_frustums = {
+        Z_MAX: np_to_pcd2(
+            np.array(
+                [
+                    uv2xyz(bbox[[0, 1]], Z_MIN),
+                    uv2xyz(bbox[[2, 1]], Z_MIN),
+                    uv2xyz(bbox[[0, 3]], Z_MIN),
+                    uv2xyz(bbox[[2, 3]], Z_MIN),
+                    uv2xyz(bbox[[0, 1]], Z_MAX),
+                    uv2xyz(bbox[[2, 1]], Z_MAX),
+                    uv2xyz(bbox[[0, 3]], Z_MAX),
+                    uv2xyz(bbox[[2, 3]], Z_MAX),
+                ]
+            ),
+            frame="zed2i_left_camera_optical_frame",
+        )
+        for Z_MAX in Z_MAXES
+    }
+
+    map_frustums = {Z_MAX: [] for Z_MAX in Z_MAXES}
 
     transformer = PointCloudTransformer()
 
@@ -53,24 +61,23 @@ def record_frustums():
 
     print("transforms are available, recording")
 
-    view_frustums = []
     while is_topic_published("/tf") and is_topic_published("/tf_static"):
-        # transform the frustum to the map frame
-        _frustum: PointCloud2 = transformer.tf(
-            view_frustum_pc2, "zed2i_left_camera_optical_frame", "map"
-        )
-        view_frustums.append(pc2_to_np(_frustum))
+        # transform the frustums from cam to the map frame
+        for z, cam_frustum in cam_frustums.items():
+            map_frustum: PointCloud2 = transformer.tf(
+                cam_frustum, "zed2i_left_camera_optical_frame", "map"
+            )
+            map_frustums[z].append(pc2_to_np(map_frustum))
 
         time.sleep(RECORD_INTERVAL)
 
-    if len(view_frustums) == 0:
-        print("No view frustums recorded")
-        return None
+    for z, map_frustum_list in map_frustums.items():
+        if len(map_frustum_list) == 0:
+            print(f"No view frustums recorded for {z}")
+            continue
 
-    print(f"recorded {len(view_frustums)} view_frustums")
-
-    view_frustums = np.vstack(view_frustums)
-    return view_frustums
+        frustums = np.vstack(map_frustum_list)
+        np.save(f"map_frustums_{z}", frustums)
 
 
 def main():
@@ -78,15 +85,30 @@ def main():
     base_path = os.path.join(package_path, "scripts")
 
     rospy.init_node("auto_select_trees")
-    if os.path.isfile(base_path + "/view_frustums.npy"):
-        view_frustums = np.load(base_path + "/view_frustums.npy")
-    else:
-        view_frustums = record_frustums()
-        assert view_frustums is not None
-        np.save("view_frustums", view_frustums)
 
-    def mark_viewport_visbility(filename: str, _frustums):
-        df = pd.read_csv(os.path.join(base_path, filename))
+    if "map_frustums" not in "".join(os.listdir(base_path)):
+        record_frustums()
+        return
+
+    # find distances associated with the map frustum files
+    zs = [
+        int(file.split("map_frustums_", 1)[1][:-4])
+        for file in os.listdir(base_path)
+        if "map_frustums" in file
+    ]
+
+    zs = sorted(zs)
+
+    # load the data and transform to map_o3d frame
+    map_frustums = {z: np.load(base_path + f"/map_frustums_{z}.npy") for z in zs}
+    map_o3d_frustums = {
+        z: apply_hom_tf(m_frustums, src="map", dest="map_o3d")
+        for z, m_frustums in map_frustums.items()
+    }
+    del map_frustums
+
+    def mark_viewport_visbility(infile: str, outfile: str, _frustums):
+        df = pd.read_csv(os.path.join(base_path, infile))
 
         # precompute the convex hulls of each frustum
         hulls = [Delaunay(points=_frustums[i : (8 + i), :]) for i in range(0, len(_frustums), 8)]
@@ -99,14 +121,13 @@ def main():
 
         df["visible"] = False
         df.loc[visibility_mask, "visible"] = True
-        df.to_csv(os.path.join(base_path, filename), index=False)
+        df.to_csv(os.path.join(base_path, outfile), index=False)
 
         print(f"marked {len(df[df['visible'] == True])} targets as visible")
 
-    # transform the recorded frustums to the map_o3d frame
-    view_frustums_o3d = apply_hom_tf(view_frustums, src="map", dest="map_o3d")
-
-    mark_viewport_visbility("tree_targets.csv", view_frustums_o3d)
+    # export CSV file of the visible files
+    for z, map_o3d_frustum in map_o3d_frustums.items():
+        mark_viewport_visbility("tree_targets.csv", f"map_o3d_targets_{z}.csv", map_o3d_frustum)
 
 
 if __name__ == "__main__":
