@@ -4,9 +4,12 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 from treedet_ros.icp import icp
-from pcl import pc2 as pcl, kp2 as kpts, set_axes_equal
+from pcl import set_axes_equal
 
 # https://www.stereolabs.com/docs/positional-tracking/coordinate-frames
+
+pcl = np.load("pcl2.npy")
+kpts = np.load("kpts2.npy")
 
 pcl = pcl[pcl[:, 2] >= 3]  # reject too close points
 # pcl = pcl[pcl[:, 2] <= 6]  # reject too far points
@@ -76,6 +79,42 @@ w_ax2 = ray_vec(kpts[12:14])
 p_fc = estimate_3d(pcl, w_fc)
 p_ax2 = estimate_3d(pcl, w_ax2)
 
+points = np.linspace(0, 10, 200)
+ray_fc = np.array(
+    [
+        w_fc[0] * points,
+        w_fc[1] * points,
+        w_fc[2] * points,
+    ]
+).T
+ray_ax2 = np.array(
+    [
+        w_ax2[0] * points,
+        w_ax2[1] * points,
+        w_ax2[2] * points,
+    ]
+).T
+
+
+# fig = plt.figure()
+# ax = fig.add_subplot(111, projection="3d")
+# ax.set_xlabel("X")
+# ax.set_ylabel("Y")
+# ax.set_zlabel("Z")
+
+# ax.scatter(pcl[:, 0], pcl[:, 1], pcl[:, 2], label="Filtered LiDAR pcl", alpha=0.6)
+# ax.scatter(ray_fc[:, 0], ray_fc[:, 1], ray_fc[:, 2], label="Felling Cut", alpha=0.2)
+# ax.scatter(ray_ax2[:, 0], ray_ax2[:, 1], ray_ax2[:, 2], label="Axial Line", alpha=0.2)
+
+# set_axes_equal(ax)
+# # ax.grid(False)
+# ax.legend()
+# plt.show()
+# ax.view_init(elev=90, azim=90)  # Change these values to adjust the angle
+
+
+# assert False
+
 
 def XY_from_uvZ(uv, Z):
     X = (uv[0] - cx) * Z / fx
@@ -136,9 +175,9 @@ ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.set_zlabel("Z")
 
-ax.scatter(pcl[:, 0], pcl[:, 1], pcl[:, 2], label="Filtered LiDAR pcl", alpha=0.1)
-ax.scatter(cylinder_tf[:, 0], cylinder_tf[:, 1], cylinder_tf[:, 2], label="cylinder", alpha=0.1)
-ax.scatter(p_fc[0], p_fc[1], p_fc[2], label="p_fc")
+ax.scatter(pcl[:, 0], pcl[:, 1], pcl[:, 2], label="Filtered LiDAR pcl", alpha=0.3)
+ax.scatter(cylinder_tf[:, 0], cylinder_tf[:, 1], cylinder_tf[:, 2], label="cylinder", alpha=0.3)
+ax.scatter(p_fc[0], p_fc[1], p_fc[2], label="p_fc", s=140)
 
 set_axes_equal(ax)
 ax.legend()
