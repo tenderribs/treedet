@@ -97,7 +97,9 @@ def estimate_3d_tree_data(kpts: np.ndarray, pcl: np.ndarray):
     XY_l = XY_from_uvZ(l_uv, p_fc[2])
     XY_r = XY_from_uvZ(r_uv, p_fc[2])
     radius = np.sqrt(np.sum((XY_l - XY_r) ** 2)) / 2
-    height = np.sqrt(np.sum((p_fc - p_ax2) ** 2))
+    # height = np.sqrt(np.sum((p_fc - p_ax2) ** 2))
+    # height estimation pretty wack, is redundant as cutting information and causes issues with ICP
+    height = 2
     print(f"radius {radius}")
     print(f"height {height}")
     return (

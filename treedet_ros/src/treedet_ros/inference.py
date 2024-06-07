@@ -23,7 +23,7 @@ MAX_TREE_LATERAL_ERR: float = 0.4
 DETECTION_CONF_THRESH: float = 0.95
 TRACKER_MAX_AGE: int = 1
 DET_RETENTION_S: int = 1
-FIT_CYLINDER: bool = False
+FIT_CYLINDER: bool = True
 
 
 def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
