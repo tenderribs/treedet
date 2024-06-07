@@ -18,12 +18,12 @@ from harveri_msgs.msg import HarveriDetectedTrees, HarveriDetectedTree
 from treedet_ros.cutting_data import get_cutting_data
 from treedet_ros.sort_tracker import Sort
 
-RATE_LIMIT = 5.0
+RATE_LIMIT = 5
 MAX_TREE_LATERAL_ERR: float = 0.4
-DETECTION_CONF_THRESH: float = 0.8
+DETECTION_CONF_THRESH: float = 0.95
 TRACKER_MAX_AGE: int = 1
 DET_RETENTION_S: int = 1
-FIT_CYLINDER: bool = True
+FIT_CYLINDER: bool = False
 
 
 def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
