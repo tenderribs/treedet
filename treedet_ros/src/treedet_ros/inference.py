@@ -19,10 +19,10 @@ from treedet_ros.cutting_data import get_cutting_data
 from treedet_ros.sort_tracker import Sort
 
 RATE_LIMIT = 5  # main loop frequency
-MAX_TREE_LATERAL_ERR: float = 1  # if new detection is within this distance to existing tree, merge
+MAX_TREE_LATERAL_ASSOC: float = 1  # associate new det with existing tree under this dist
 DETECTION_CONF_THRESH: float = 0.95  # accept detections only within this threshold
 TRACKER_MAX_AGE: int = 1  # flush tracked obj. if unseen for more than this number of frames
-DET_RETENTION_S: int = 1  # flush tracked obj. if no new data received for this number of seconds
+DET_RETENTION_S: int = 4  # flush tracked obj. if no new data received for this number of seconds
 FIT_CYLINDER: bool = True  # whether fit partial cylinder to lidar scan or use coordinates directly
 
 
@@ -202,7 +202,7 @@ class TreeDetector:
 
         distances = np.linalg.norm(new_d[:2] - existing_trees[:, :2], axis=1)
         min_distance_index = np.argmin(distances)
-        if distances[min_distance_index] < MAX_TREE_LATERAL_ERR:
+        if distances[min_distance_index] < MAX_TREE_LATERAL_ASSOC:
             return existing_t_ids[min_distance_index]
 
         return None
@@ -218,7 +218,7 @@ class TreeDetector:
         # remove old trees
         to_del = []
         for tracking_id, data in self.tree_index.items():
-            # if the tree has not received any detections for longer than 4 seconds
+            # if the tree has not received any detections for longer than x seconds
             if (
                 self.frame_count - self.tree_index[tracking_id][-1][6]
                 > DET_RETENTION_S * RATE_LIMIT
@@ -253,15 +253,15 @@ class TreeDetector:
 
     def fetch_tree_data(self):
         """Read the tree index and prepare an average of values"""
-        ret_tree_data = []
+        indexed_trees = []
 
         for tree_data in self.tree_index.values():
             # compute the mean of existing values
             tree_data = np.vstack(tree_data)
-            ret_tree_data.append(np.mean(tree_data, axis=0))
+            indexed_trees.append(np.mean(tree_data, axis=0))
 
-        if len(ret_tree_data) > 0:
-            return np.vstack(ret_tree_data), list(self.tree_index.keys())
+        if len(indexed_trees) > 0:
+            return np.vstack(indexed_trees), list(self.tree_index.keys())
         return np.empty((0, 7)), []
 
     def process(self, rgb_img: np.ndarray, pcl: np.ndarray):
@@ -326,6 +326,5 @@ class TreeDetector:
 
 def main():
     rospy.init_node("treedet_inference", anonymous=True)
-
     TreeDetector()
     rospy.spin()
