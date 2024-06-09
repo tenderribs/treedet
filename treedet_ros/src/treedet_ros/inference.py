@@ -14,7 +14,7 @@ from sensor_msgs.msg import CompressedImage
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
 
-from harveri_msgs.msg import HarveriDetectedTrees, HarveriDetectedTree
+# from harveri_msgs.msg import HarveriDetectedTrees, HarveriDetectedTree
 from treedet_ros.cutting_data import get_cutting_data
 from treedet_ros.sort_tracker import Sort
 
@@ -61,26 +61,26 @@ def np_to_pcd2(XYZ: np.ndarray, frame: str) -> PointCloud2:
     return point_cloud2.create_cloud(header, fields, points)
 
 
-def np_to_hvri_det_trees(
-    xyz: np.ndarray, dims: np.ndarray, tracking_ids, frame: str = "map"
-) -> HarveriDetectedTrees:
-    assert xyz.shape[1] == 3 and dims.shape[1] == 3
+# def np_to_hvri_det_trees(
+#     xyz: np.ndarray, dims: np.ndarray, tracking_ids, frame: str = "map"
+# ) -> HarveriDetectedTrees:
+#     assert xyz.shape[1] == 3 and dims.shape[1] == 3
 
-    tree_list = HarveriDetectedTrees()
-    tree_list.header.frame_id = frame
+#     tree_list = HarveriDetectedTrees()
+#     tree_list.header.frame_id = frame
 
-    for i, (_xyz, _dims, _t_id) in enumerate(zip(xyz, dims, tracking_ids)):
-        msg = HarveriDetectedTree()
-        msg.id = int(_t_id)
+#     for i, (_xyz, _dims, _t_id) in enumerate(zip(xyz, dims, tracking_ids)):
+#         msg = HarveriDetectedTree()
+#         msg.id = int(_t_id)
 
-        msg.x = _xyz[0]
-        msg.y = _xyz[1]
-        msg.z = _xyz[2]
-        msg.dim_x = _dims[0]
-        msg.dim_y = _dims[2]
-        msg.dim_z = _dims[2]
-        tree_list.trees.append(msg)
-    return tree_list
+#         msg.x = _xyz[0]
+#         msg.y = _xyz[1]
+#         msg.z = _xyz[2]
+#         msg.dim_x = _dims[0]
+#         msg.dim_y = _dims[2]
+#         msg.dim_z = _dims[2]
+#         tree_list.trees.append(msg)
+#     return tree_list
 
 
 def get_detections(raw_dets: list, rescale_ratio: float):
@@ -132,13 +132,13 @@ class TreeDetector:
         self.br = CvBridge()
 
         self.felling_cut_pub = rospy.Publisher("/treedet/felling_cut", PointCloud2, queue_size=10)
-        self.detection_pub = rospy.Publisher(
-            "/treedet/detected_trees", HarveriDetectedTrees, queue_size=10
-        )
+        # self.detection_pub = rospy.Publisher(
+        #     "/treedet/detected_trees", HarveriDetectedTrees, queue_size=10
+        # )
 
         package_path = rospkg.RosPack().get_path("treedet_ros")
         model_path = os.path.join(package_path, "model.onnx")
-        self.session = onnxruntime.InferenceSession(model_path)
+        self.session = onnxruntime.InferenceSession(model_path, providers=["CUDAExecutionProvider"])
         print("Loaded Model")
 
         self.data_buffer = ([], [])  # RGB, Depth
@@ -178,8 +178,9 @@ class TreeDetector:
         pcd = self.pcl_transformer.tf(pcd, "PandarQT", "zed2i_left_camera_optical_frame")
 
         if pcd:
+            np_pcd: np.ndarray = pc2_to_np(pcd)
             with self.lock:
-                self.data_buffer[1].append(pcd)
+                self.data_buffer[1].append(np_pcd)
 
     def timer_callback(self, event) -> None:
         with self.lock:
@@ -190,8 +191,6 @@ class TreeDetector:
                 rgb_img = rgb_img[:, :, :3]  # cut out the alpha channel (bgra8 -> bgr8)
 
                 lidar_pcl: PointCloud2 = self.data_buffer[1][-1]
-
-                lidar_pcl: np.ndarray = pc2_to_np(lidar_pcl)
                 self.process(rgb_img, lidar_pcl)
 
                 self.data_buffer = ([], [])
@@ -314,14 +313,14 @@ class TreeDetector:
         print(f"extract_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
         self.felling_cut_pub.publish(np_to_pcd2(XYZ=tree_cutting_data[:, :3], frame="map"))
-        self.detection_pub.publish(
-            np_to_hvri_det_trees(
-                tree_cutting_data[:, :3],
-                tree_cutting_data[:, 3:6],
-                tracking_ids,
-                frame="map",
-            )
-        )
+        # self.detection_pub.publish(
+        #     np_to_hvri_det_trees(
+        #         tree_cutting_data[:, :3],
+        #         tree_cutting_data[:, 3:6],
+        #         tracking_ids,
+        #         frame="map",
+        #     )
+        # )
 
 
 def main():
