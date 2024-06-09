@@ -122,7 +122,7 @@ if __name__ == "__main__":
         f for f in image_files if f.lower().endswith((".png", ".jpg", ".jpeg"))
     ]  # Filter for image files
 
-    session = onnxruntime.InferenceSession(args.model)
+    session = onnxruntime.InferenceSession(args.model, providers=["CUDAExecutionProvider"])
 
     total_inference = 0
 
