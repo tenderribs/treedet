@@ -18,12 +18,12 @@ from harveri_msgs.msg import HarveriDetectedTrees, HarveriDetectedTree
 from treedet_ros.cutting_data import get_cutting_data
 from treedet_ros.sort_tracker import Sort
 
-RATE_LIMIT = 5
-MAX_TREE_LATERAL_ERR: float = 0.4
-DETECTION_CONF_THRESH: float = 0.95
-TRACKER_MAX_AGE: int = 1
-DET_RETENTION_S: int = 1
-FIT_CYLINDER: bool = True
+RATE_LIMIT = 5  # main loop frequency
+MAX_TREE_LATERAL_ERR: float = 1  # if new detection is within this distance to existing tree, merge
+DETECTION_CONF_THRESH: float = 0.95  # accept detections only within this threshold
+TRACKER_MAX_AGE: int = 1  # flush tracked obj. if unseen for more than this number of frames
+DET_RETENTION_S: int = 1  # flush tracked obj. if no new data received for this number of seconds
+FIT_CYLINDER: bool = True  # whether fit partial cylinder to lidar scan or use coordinates directly
 
 
 def preprocess_rgb(img: np.ndarray, input_size: tuple, swap=(2, 0, 1)):
@@ -189,7 +189,6 @@ class TreeDetector:
                 rgb_img: np.ndarray = self.br.compressed_imgmsg_to_cv2(rgb_msg)
                 rgb_img = rgb_img[:, :, :3]  # cut out the alpha channel (bgra8 -> bgr8)
 
-                print(f"lidar buffer len {len(self.data_buffer[1])}")
                 lidar_pcl: PointCloud2 = self.data_buffer[1][-1]
 
                 lidar_pcl: np.ndarray = pc2_to_np(lidar_pcl)
@@ -238,17 +237,17 @@ class TreeDetector:
             existing_trees, existing_t_ids = self.fetch_tree_data()
 
             for new_d, tracking_id in zip(new_tree_data, tracking_ids):
-                # if tree is being tracked
+                # if tree has already been indexed
                 if tracking_id in self.tree_index:
                     self.tree_index[tracking_id].append(new_d)
                     continue
 
-                # if unable to associate det. with existing tracker, try to see if close
+                # unindexed id, calculate if probably already an existing tree:
                 existing_t_id = self.find_existing(new_d, existing_trees, existing_t_ids)
 
-                # prefer to associate tree with existing ones to prevent duplicates
+                # if so, rather prevent duplicates than start a new entry in index
                 if existing_t_id is not None:
-                    tracking_id = existing_t_id
+                    self.tree_index[existing_t_id].append(new_d)
                 else:
                     self.tree_index[tracking_id] = [new_d]
 
@@ -274,8 +273,6 @@ class TreeDetector:
 
         bboxes, confs, kpts = get_detections(output[0], ratio)
         print(f"get_detections:  \t{round((time.perf_counter() - start) * 1000, 1)} ms")
-
-        print(bboxes)
 
         # pass the detections through object tracker across frames. Tells us which trees are visible.
         # trackers: [:, bbox x1 y1 x2 y2, tracking_id]
@@ -316,7 +313,6 @@ class TreeDetector:
 
         print(f"extract_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
-        # transform the cutting point coordinates in map frame
         self.felling_cut_pub.publish(np_to_pcd2(XYZ=tree_cutting_data[:, :3], frame="map"))
         self.detection_pub.publish(
             np_to_hvri_det_trees(
