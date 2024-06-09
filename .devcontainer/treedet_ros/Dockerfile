@@ -15,7 +15,7 @@ RUN mkdir -p /root/catkin_ws/src && \
     catkin_init_workspace
 
 RUN python3 -m pip install --upgrade pip && \
-    pip install onnxruntime numpy scikit-learn scikit-image filterpy
+    pip install optimum[onnxruntime-gpu] numpy scikit-learn scikit-image filterpy
 
 WORKDIR /root/catkin_ws
 RUN source /opt/ros/${ROS_DISTRO}/setup.bash && \

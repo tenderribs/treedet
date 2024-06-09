@@ -9,19 +9,23 @@ The computer vision subfolder is based on [edgeai-yolox](https://github.com/Texa
 Install the packages for running the rospy node running with
 
 ```sh
-pip install onnxruntime numpy scikit-learn scikit-image filterpy
+pip install optimum[onnxruntime-gpu] numpy scikit-learn scikit-image filterpy
 ```
 
-This project has a two configured VSCode Devcontainers in `.devcontainer` to facilitate setup for both ROS and ML model development.
+The onnxruntime is set to use the CUDA execution provider, but might default to the CPU execution provider if CUDA isn't configured properly.
 
+For a more detailed setup info, this project has a two configured VSCode Devcontainers in `.devcontainer` to facilitate automatic setup for both ROS and ML model development.
 
 ## ROS
 
 ### Nodes
 
-```
+
+```bash
 roslaunch treedet_ros main.launch
 ```
+
+
 
 - When running the code on rosbags from field tests, it is important to use the `--clock` flag to indicate sim time, for example:
 ```sh
