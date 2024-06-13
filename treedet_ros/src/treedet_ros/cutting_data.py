@@ -81,9 +81,9 @@ def estimate_3d_tree_data(kpts: np.ndarray, pcl: np.ndarray):
     """
 
     w_fc = ray_vec(kpts[0:2])
-    w_ax2 = ray_vec(kpts[12:14])
+    # w_ax2 = ray_vec(kpts[12:14])
     p_fc = estimate_3d(pcl, w_fc)
-    p_ax2 = estimate_3d(pcl, w_ax2)
+    # p_ax2 = estimate_3d(pcl, w_ax2)
 
     def XY_from_uvZ(uv, Z):
         X = (uv[0] - cx) * Z / fx
