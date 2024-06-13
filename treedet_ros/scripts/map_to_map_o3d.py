@@ -2,11 +2,11 @@ import numpy as np
 import os
 import open3d as o3d
 import rospy
-import ros_numpy
 import tf2_ros
 import time
 from sensor_msgs.msg import PointCloud2
 import tf2_sensor_msgs
+from sensor_msgs import point_cloud2
 
 from treedet_ros.icp import icp
 from treedet_ros.inference import PointCloudTransformer
@@ -31,9 +31,8 @@ class PointCloudExtractor:
             self.pc2s.append(pc2_map)
 
     def pc2_to_np(self, pcl: PointCloud2):
-        pc_array = ros_numpy.point_cloud2.pointcloud2_to_array(pcl)
-        xyz_array = np.vstack((pc_array["x"], pc_array["y"], pc_array["z"])).transpose()
-        return xyz_array
+        pc2 = point_cloud2.read_points(pcl, field_names=("x", "y", "z"), skip_nans=True)
+        return np.array(list(pc2), dtype=np.float32)
 
     def get_agg_pointcloud(self):
         print(f"returning {len(self.pc2s)} aggregated map pointclouds")
