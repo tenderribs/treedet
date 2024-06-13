@@ -44,7 +44,7 @@ To train the network, you need the synthetic and real datasets.
 
 - Annotations for Synth43k and CanaTree100 are provided in the folders on S3 and Onedrive respectively. Wikitrees has annotations on Google Drive and also has annotations of both real datasets merged together. Note that you should still symlink the image files of CanaTree100 into the WikiTree100 for the full CanaWikiTree200 dataset.
 
-- The best performing model is already located in the `treedet/treedet` folder in onnx format for your convenience. For the other model checkpoint files, check out this link: [Pretrained Model Checkpoint Files](https://drive.google.com/drive/folders/13LVyUGIS0vzHjzDNI97sHVZ7jDmVtHd1?usp=drive_link)
+- The best performing model is already located in the `treedet/treedet_ros` folder in onnx format as `model.onnx` for your convenience. For the other model checkpoint files, check out this link: [Pretrained Model Checkpoint Files](https://drive.google.com/drive/folders/13LVyUGIS0vzHjzDNI97sHVZ7jDmVtHd1?usp=drive_link). Commands for creating onnx files are availble in `commands.sh`
 
 - Here is the expected example file system format for the datasets folder, starting from the `treedet/treedet` folder:
 
