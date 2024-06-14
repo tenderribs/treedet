@@ -25,9 +25,20 @@ For a more detailed setup info, this project has a two configured VSCode Devcont
 roslaunch treedet_ros main.launch
 ```
 
+At the time of the project deadline, the detected trees are published as HarveriDetectedTrees to provide compatibility with the existing software. Unfortunately this stays consistentent with the existing simplification that the trees are vertical cylinders, despite more accurate pose information being available. Truth be told, it is only a minor issue.
 
+### Some remarks
+- Look in the files `inference.py` and `cutting_data.py` for the core software.
+
+- Tree cutting data is saved in the `tree_index` in this format (in the map frame):
+```
+[[pos_x, pos_y, pos_z, dim_x, dim_y, dim_z]]
+```
+
+The pos coordinates represent the cutting point of the tree (not the center of a cylinder).
 
 - When running the code on rosbags from field tests, it is important to use the `--clock` flag to indicate sim time, for example:
+
 ```sh
 rosbag play -l --clock *.bag
 ```
