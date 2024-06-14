@@ -13,10 +13,12 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import CompressedImage
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs import point_cloud2
+from visualization_msgs.msg import MarkerArray
 
-# from harveri_msgs.msg import HarveriDetectedTrees, HarveriDetectedTree
+from harveri_msgs.msg import HarveriDetectedTrees, HarveriDetectedTree
 from treedet_ros.cutting_data import get_cutting_data
 from treedet_ros.sort_tracker import Sort
+from treedet_ros.rviz import point_markers
 
 RATE_LIMIT = 5  # main loop frequency
 MAX_TREE_LATERAL_ASSOC: float = 1  # associate new det with existing tree under this dist
@@ -61,26 +63,26 @@ def np_to_pcd2(XYZ: np.ndarray, frame: str) -> PointCloud2:
     return point_cloud2.create_cloud(header, fields, points)
 
 
-# def np_to_hvri_det_trees(
-#     xyz: np.ndarray, dims: np.ndarray, tracking_ids, frame: str = "map"
-# ) -> HarveriDetectedTrees:
-#     assert xyz.shape[1] == 3 and dims.shape[1] == 3
+def np_to_hvri_det_trees(
+    xyz: np.ndarray, dims: np.ndarray, tracking_ids, frame: str = "map"
+) -> HarveriDetectedTrees:
+    assert xyz.shape[1] == 3 and dims.shape[1] == 3
 
-#     tree_list = HarveriDetectedTrees()
-#     tree_list.header.frame_id = frame
+    tree_list = HarveriDetectedTrees()
+    tree_list.header.frame_id = frame
 
-#     for i, (_xyz, _dims, _t_id) in enumerate(zip(xyz, dims, tracking_ids)):
-#         msg = HarveriDetectedTree()
-#         msg.id = int(_t_id)
+    for i, (_xyz, _dims, _t_id) in enumerate(zip(xyz, dims, tracking_ids)):
+        msg = HarveriDetectedTree()
+        msg.id = int(_t_id)
 
-#         msg.x = _xyz[0]
-#         msg.y = _xyz[1]
-#         msg.z = _xyz[2]
-#         msg.dim_x = _dims[0]
-#         msg.dim_y = _dims[2]
-#         msg.dim_z = _dims[2]
-#         tree_list.trees.append(msg)
-#     return tree_list
+        msg.x = _xyz[0]
+        msg.y = _xyz[1]
+        msg.z = _xyz[2]
+        msg.dim_x = _dims[0]
+        msg.dim_y = _dims[2]
+        msg.dim_z = _dims[2]
+        tree_list.trees.append(msg)
+    return tree_list
 
 
 def get_detections(raw_dets: list, rescale_ratio: float):
@@ -132,9 +134,8 @@ class TreeDetector:
         self.br = CvBridge()
 
         self.felling_cut_pub = rospy.Publisher("/treedet/felling_cut", PointCloud2, queue_size=10)
-        # self.detection_pub = rospy.Publisher(
-        #     "/treedet/detected_trees", HarveriDetectedTrees, queue_size=10
-        # )
+        self.viz_pub = rospy.Publisher("/treedet/viz", MarkerArray, queue_size=10)
+        self.detection_pub = rospy.Publisher("/treedet/detected_trees", HarveriDetectedTrees, queue_size=10)
 
         package_path = rospkg.RosPack().get_path("treedet_ros")
         model_path = os.path.join(package_path, "model.onnx")
@@ -313,14 +314,18 @@ class TreeDetector:
         print(f"extract_cutting_data:\t{round((time.perf_counter() - start) * 1000, 1)} ms")
 
         self.felling_cut_pub.publish(np_to_pcd2(XYZ=tree_cutting_data[:, :3], frame="map"))
-        # self.detection_pub.publish(
-        #     np_to_hvri_det_trees(
-        #         tree_cutting_data[:, :3],
-        #         tree_cutting_data[:, 3:6],
-        #         tracking_ids,
-        #         frame="map",
-        #     )
-        # )
+
+        self.viz_pub.publish(
+            point_markers(tree_cutting_data[:, :3], tree_cutting_data[:, 3:6], "map")
+        )
+        self.detection_pub.publish(
+            np_to_hvri_det_trees(
+                tree_cutting_data[:, :3],
+                tree_cutting_data[:, 3:6],
+                tracking_ids,
+                frame="map",
+            )
+        )
 
 
 def main():
